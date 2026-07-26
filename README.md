@@ -40,6 +40,54 @@ assets/app.js           renders every panel from the data file
 data/market-data.js     ← the only file you edit routinely
 ```
 
+## Automated feed collection
+
+A GitHub Action (`.github/workflows/collect.yml`) runs Mondays at 13:00 UTC
+(06:00 Pacific during PDT — change the cron to `0 14 * * 1` for winter, GitHub
+does not observe DST). It reads RSS feeds, types each article as an event,
+extracts quantities, and opens a **pull request**. Nothing reaches the live
+site without you merging it.
+
+Run it on demand: Actions tab -> Collect market feeds -> Run workflow.
+
+### What it produces
+
+- `data/feed.js` — tagged events the site renders. Headline, link, date, tags.
+- `digest.md` — staging file for the judgment pass.
+
+### What it never does
+
+Store article body text. Full text is fetched into memory for signal detection
+and discarded. What persists is derived signals plus a link. Aggregating and
+linking is what RSS is for; republishing prose is infringement.
+
+### Tuning it
+
+Everything lives in `scripts/ontology.py` — sources, entity lists, event
+typing rules, signal dictionaries, noise filters, scoring weights. When the
+collector misses something, add the term there. Never edit `collect.py` to fix
+a vocabulary gap.
+
+Ambiguous company names (Aligned, Switch, Compass, Prime, Vantage) are listed
+in `AMBIGUOUS_TERMS` and only match when capitalised in the source, so ordinary
+English usage does not trigger them.
+
+### The judgment pass
+
+Rules can type an event and pull numbers. They cannot tell a new campus from
+the same one re-announced, resolve "a leading AI company" to a counterparty,
+decide whether an unstated MW figure is IT or gross, or read whether a
+guarantee sits at parent or opco. Take `digest.md` into a Claude conversation
+and do that pass before promoting anything into `data/market-data.js`.
+
+## Manual-only sources
+
+Do not point automation at these:
+
+- **DC Byte** — subscription market intelligence; the compiled dataset is the product
+- **Baxtel** — compiled facility database; bulk extraction is against terms
+- **CBRE / JLL / Cushman** — free summary reports may be cited, subscription products may not
+
 ## Known gaps
 
 Capital markets is the thinnest layer under a public-only constraint. Private
