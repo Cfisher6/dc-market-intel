@@ -1,4 +1,4 @@
-# Staging digest — 2026-07-26
+# Staging digest — 2026-08-03
 
 Machine-collected and rule-typed. **Nothing here is verified.** Run this through
 a judgment pass before promoting anything into `data/market-data.js`.
@@ -11,57 +11,65 @@ What the rules cannot do, and you must:
 - Read whether a guarantee sits at parent or opco
 - Judge whether an announced project is financeable or a press release
 
-Sources checked: Data Center Dynamics (20), Data Center Frontier (9), Data Center Planet FAILED, Utility Dive (10)
+Sources checked: Data Center Dynamics (20), Data Center Frontier (7), Data Center Planet FAILED, Utility Dive (10)
 
 ---
 
 > **Feed problems:** Data Center Planet — no entries — check feed URL in ontology.py SOURCES
 
 
-## Ranked events (5 of 35 above threshold, 14-day window)
+## Ranked events (6 of 36 above threshold, 14-day window)
 
 
-### [13.0] OTHER — TeraWulf’s $19B Anthropic Lease Puts Its Brownfield AI Strategy to the Test
-- DCF · 2026-07-16 · <https://www.datacenterfrontier.com/hyperscale/article/55389531/terawulfs-19b-anthropic-lease-puts-its-brownfield-ai-strategy-to-the-test>
-- Parties: Anthropic, TeraWulf
-- Signals: 401 MW (IT), $19.0B
-- Power: —
-
-
-### [8.0] CAPACITY_ANNOUNCED — Empery Digital invests $20m in Cardinal Data Power
-- DCD · 2026-07-24 · <https://www.datacenterdynamics.com/en/news/empery-digital-invests-20m-in-cardinal-data-power/>
-- Parties: —
-- Signals: 5,000 MW (unstated), $20M, West Texas
-- Power: —
-
-
-### [7.5] INTERCONNECT_FILED — SRP to propose up to 1.7-GW mixed-resource project to its board in September
-- UD · 2026-07-21 · <https://www.utilitydive.com/news/srp-marigold-project-board-energy-storage/825813/>
-- Parties: —
-- Signals: 675 MW (unstated), Phoenix
+### [9.0] POWER_SECURED — Google signs 155MW solar PPA with RWE in Oklahoma
+- DCD · 2026-08-03 · <https://www.datacenterdynamics.com/en/news/google-signs-155mw-solar-ppa-with-rwe-in-oklahoma/>
+- Parties: Google
+- Signals: 155 MW (unstated)
 - Power: generation
 
 
-### [6.5] OTHER — Parks S/A to invest R$500m in 5MW data center in Cachoeirinha, Brazil
-- DCD · 2026-07-24 · <https://www.datacenterdynamics.com/en/news/parks-sa-to-invest-r500-million-in-a-new-tier-iii-data-center-in-cachoeirinha-rio-grande-do-sul/>
+### [9.0] INTERCONNECT_FILED — PJM files backstop auction plan at FERC to meet capacity shortfall
+- UD · 2026-08-03 · <https://www.utilitydive.com/news/pjm-backstop-capacity-auction-ferc-data-centers/826792/>
 - Parties: —
-- Signals: 5 MW (unstated), $500M
+- Signals: 70,000 MW aggregate/queue, **GUARANTEE LANGUAGE**
+- Power: FERC, PJM
+
+
+### [8.5] SITE_ACQUIRED — Yondr Group and Cerberus acquire 40 acres for data center campus in Manassas, Virginia
+- DCD · 2026-08-03 · <https://www.datacenterdynamics.com/en/news/yondr-group-and-cerberus-acquire-40-acres-for-data-center-campus-in-manassas-virginia/>
+- Parties: Yondr
+- Signals: 72 MW (unstated)
 - Power: —
 
 
-### [6.0] DELAY_REPORTED — Vantage, VoltaGrid face lawsuit concerning natural gas powered off-grid data centers in San Antonio, Texas
-- DCD · 2026-07-24 · <https://www.datacenterdynamics.com/en/news/vantage-voltagrid-face-lawsuit-concerning-natural-gas-powered-off-grid-data-centers-in-san-antonio-texas/>
-- Parties: Vantage
-- Signals: San Antonio
+### [7.5] LEASE_SIGNED — Neocloud Kidz AI signs MoU with Limestone Networks for colocation agreement
+- DCD · 2026-08-03 · <https://www.datacenterdynamics.com/en/news/neocloud-kidz-ai-signs-mou-with-limestone-networks-for-colocation-agreement/>
+- Parties: —
+- Signals: 1 MW (unstated), Dallas-Fort Worth
 - Power: —
+
+
+### [7.0] CAPACITY_ANNOUNCED — Meta’s Canadian AI Data Center: A New Model for Infrastructure and Energy Integration
+- DCF · 2026-07-29 · <https://www.datacenterfrontier.com/hyperscale/article/55391399/metas-canadian-ai-data-center-a-new-model-for-infrastructure-and-energy-integration>
+- Parties: Meta
+- Signals: 932 MW (unstated)
+- Power: —
+
+
+### [6.5] INTERCONNECT_FILED — Dominion offshore wind project cost rises nearly $300M
+- UD · 2026-08-03 · <https://www.utilitydive.com/news/dominion-offshore-wind-project-cost-rises-nearly-300m/826845/>
+- Parties: —
+- Signals: $300M
+- Power: Dominion, PJM, generation
 
 
 ## Announced MW by counterparty (unverified, may double-count)
 
 | Counterparty | Kind | MW announced | Events |
 |---|---|---:|---:|
-| TeraWulf | neocloud | 401 | 1 |
-| Anthropic | hyperscaler | 401 | 1 |
+| Meta | hyperscaler | 932 | 1 |
+| Google | hyperscaler | 155 | 1 |
+| Yondr | operator | 72 | 1 |
 
 
 ## Manual sources — check these by hand
