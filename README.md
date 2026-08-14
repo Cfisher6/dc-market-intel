@@ -5,16 +5,22 @@ Static, public-source market intelligence site. Two views:
 - **Dashboard** (homepage) — machine-collected market events (deals, land
   acquisitions, power moves, capacity announcements) as an interactive work
   surface: cross-filtering (every breakdown bar and tag chip is a filter),
-  counterparty profile drill-downs, a weekly activity timeline, date/score/
-  MW/$ filters, guarantee/prelease signal flags, expandable row detail,
-  a localStorage pin watchlist, CSV export of the filtered set, and
+  counterparty profile drill-downs, a weekly activity timeline, a metro-level
+  activity map (Leaflet; bubbles are location tags, not facility coordinates),
+  a development-pipeline board (event types in lifecycle order, with an
+  at-risk strip for delays/moratoria), a browsable counterparty directory,
+  date/score/MW/$ filters, guarantee/prelease signal flags, expandable row
+  detail, a localStorage pin watchlist, CSV export of the filtered set, and
   shareable view links (filters serialize to the URL query string).
   Unverified, clearly labeled as such — every row links to its source.
 - **Research** — the curated five-layer narrative report (supply/demand
   fundamentals, power, capital markets, counterparty, public equities), hand
   maintained in `data/market-data.js`.
 
-No build step. No dependencies. Plain HTML/CSS/JS.
+No build step. Plain HTML/CSS/JS. One optional runtime dependency: Leaflet
+(loaded from CDN, pinned + integrity-hashed) renders the activity map; when
+it can't load (offline, file://) the map section hides itself and everything
+else works untouched.
 
 ## Deploy to GitHub Pages
 

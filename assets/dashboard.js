@@ -50,6 +50,41 @@
 
   var PIN_KEY = "dc_pins";
 
+  /* Metro centroids for the activity map. Keys must match ontology METROS.
+     A metro missing here still works everywhere else — it just doesn't plot,
+     and the map note counts it as unmapped. */
+  var METRO_COORDS = {
+    "Northern Virginia": [39.04, -77.49],
+    "Dallas-Fort Worth": [32.78, -97.04],
+    "West Texas": [32.45, -99.74],
+    "East Texas": [32.35, -94.87],
+    "San Antonio": [29.42, -98.49],
+    "Austin": [30.27, -97.74],
+    "Atlanta": [33.75, -84.39],
+    "Phoenix": [33.45, -112.07],
+    "Chicago": [41.88, -87.63],
+    "Columbus": [39.96, -83.00],
+    "Salt Lake City": [40.76, -111.89],
+    "Silicon Valley": [37.35, -121.95],
+    "Hillsboro": [45.52, -122.99],
+    "Omaha": [41.26, -95.93],
+    "Richmond": [37.54, -77.44],
+    "Memphis": [35.15, -90.05],
+    "Louisiana": [32.35, -91.75],
+    "Wisconsin": [42.72, -87.85]
+  };
+
+  /* Lifecycle stages for the pipeline board, built from the event types the
+     collector already assigns. Order = a project's rough path to revenue. */
+  var PIPELINE = [
+    { label: "Site control", types: ["SITE_ACQUIRED"] },
+    { label: "Interconnection", types: ["INTERCONNECT_FILED"] },
+    { label: "Power secured", types: ["POWER_SECURED"] },
+    { label: "Capacity announced", types: ["CAPACITY_ANNOUNCED", "EXPANSION_EXERCISED"] },
+    { label: "Commercial", types: ["LEASE_SIGNED", "TENANT_DISCLOSED"] },
+    { label: "Capital", types: ["FINANCING_CLOSED", "PLATFORM_M&A"] }
+  ];
+
   function typeLabel(t) { return EVENT_TYPE_LABEL[t] || t; }
   function typeColor(t) { return EVENT_TYPE_COLOR[t] || "neutral"; }
 
@@ -180,7 +215,10 @@
       var filtered = sortList(events.filter(matches));
       renderSummary(filtered);
       renderTimeline(filtered);
+      renderMap(filtered);
+      renderPipeline(filtered);
       renderBreakdowns(filtered);
+      renderDirectory();
       renderActiveChips();
       renderEntityCard();
       renderTable(filtered);
@@ -416,6 +454,153 @@
         chart("Events per week", function (r) { return r.n; }) +
         chart("Announced MW per week", function (r) { return r.mw; }, "MW");
     }
+
+    /* --- activity map (metro-level, click a bubble to filter) ------------------ */
+    // Declaration only — no initializer. The first rerender() runs before this
+    // line, and `var x = null` here would clobber the map it already created.
+    var mapObj, mapLayer;
+    function renderMap(filtered) {
+      var box = el("dash-map");
+      if (!box) return;
+      if (typeof L === "undefined") { box.hidden = true; return; } // offline: map is optional
+      box.hidden = false;
+      if (!mapObj) {
+        mapObj = L.map("map-canvas", { scrollWheelZoom: false }).setView([38.5, -96.5], 4);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 10,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(mapObj);
+        mapLayer = L.layerGroup().addTo(mapObj);
+      }
+      var byMetro = {}, unmapped = 0, untagged = 0;
+      filtered.forEach(function (ev) {
+        var ms = ev.metros || [];
+        if (!ms.length) { untagged++; return; }
+        ms.forEach(function (m) {
+          if (!METRO_COORDS[m]) { unmapped++; return; }
+          var r = byMetro[m] || (byMetro[m] = { n: 0, mw: 0 });
+          r.n += 1;
+          r.mw += mwOf(ev) || 0;
+        });
+      });
+      mapLayer.clearLayers();
+      Object.keys(byMetro).forEach(function (m) {
+        var r = byMetro[m];
+        var active = state.metro === m;
+        var radius = Math.max(7, Math.min(30, 5 + Math.sqrt(r.mw + 1) / 3 + r.n));
+        var c = L.circleMarker(METRO_COORDS[m], {
+          radius: radius,
+          color: active ? "#C2453A" : "#131A22",
+          fillColor: active ? "#C2453A" : "#131A22",
+          fillOpacity: 0.55,
+          weight: 1.5
+        });
+        c.bindTooltip("<strong>" + esc(m) + "</strong><br>" + fmt(r.n) + " event(s)" +
+          (r.mw ? "<br>" + fmt(Math.round(r.mw)) + " MW announced" : "") +
+          "<br><em>Click to " + (active ? "clear filter" : "filter") + "</em>");
+        c.on("click", function () { setFilter("metro", m); });
+        c.addTo(mapLayer);
+      });
+      el("map-note").textContent =
+        "Metro-level activity from location tags — not facility coordinates. " +
+        (untagged ? fmt(untagged) + " of " + fmt(filtered.length) + " filtered events carry no tagged metro (international or untagged). " : "") +
+        "Bubble size blends event count and announced MW.";
+    }
+
+    /* --- development pipeline board -------------------------------------------- */
+    function renderPipeline(filtered) {
+      var cols = PIPELINE.map(function (stage) {
+        var evs = filtered.filter(function (ev) { return stage.types.indexOf(ev.event_type) >= 0; });
+        var mw = 0, money = 0;
+        evs.forEach(function (ev) { mw += mwOf(ev) || 0; money += moneyOf(ev) || 0; });
+        var typeRows = stage.types.map(function (t) {
+          var n = evs.filter(function (ev) { return ev.event_type === t; }).length;
+          if (!n) return "";
+          return '<div class="pl-type bd-click' + (state.type === t ? " bd-active" : "") +
+            '" role="button" tabindex="0" data-fkey="type" data-fval="' + esc(t) + '">' +
+            '<span class="pill pill-' + typeColor(t) + '">' + esc(typeLabel(t)) + "</span>" +
+            '<span class="pl-count">' + fmt(n) + "</span></div>";
+        }).join("");
+        return '<div class="pl-col">' +
+          '<div class="pl-head"><h3>' + esc(stage.label) + "</h3>" +
+            '<div class="pl-stats">' + fmt(evs.length) + " ev" +
+            (mw ? " · " + fmt(Math.round(mw)) + " MW" : "") +
+            (money ? " · " + moneyLabel(money) : "") + "</div></div>" +
+          (typeRows || '<p class="bd-empty">—</p>') +
+        "</div>";
+      }).join("");
+
+      var delays = filtered.filter(function (ev) { return ev.event_type === "DELAY_REPORTED"; });
+      var dMw = 0; delays.forEach(function (ev) { dMw += mwOf(ev) || 0; });
+      var dMetros = tally(delays, function (e) { return e.metros; }).slice(0, 4)
+        .map(function (p) { return p[0] + " ×" + p[1]; }).join(", ");
+      var riskStrip = delays.length
+        ? '<div class="pl-risk bd-click' + (state.type === "DELAY_REPORTED" ? " bd-active" : "") +
+          '" role="button" tabindex="0" data-fkey="type" data-fval="DELAY_REPORTED">' +
+          "<strong>At risk:</strong> " + fmt(delays.length) + " delay / moratorium / opposition event(s)" +
+          (dMw ? " · " + fmt(Math.round(dMw)) + " MW affected" : "") +
+          (dMetros ? " · " + esc(dMetros) : "") + "</div>"
+        : "";
+
+      el("dash-pipeline").innerHTML = '<div class="pl-board">' + cols + "</div>" + riskStrip +
+        '<p class="bd-hint">Stages are the collector’s event types in lifecycle order. Counts reflect current filters; a stage total is events, not distinct projects.</p>';
+    }
+    el("dash-pipeline").addEventListener("click", function (e) {
+      var row = e.target.closest ? e.target.closest(".bd-click") : null;
+      if (row) setFilter(row.dataset.fkey, row.dataset.fval);
+    });
+    el("dash-pipeline").addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var row = e.target.closest ? e.target.closest(".bd-click") : null;
+      if (row) { e.preventDefault(); setFilter(row.dataset.fkey, row.dataset.fval); }
+    });
+
+    /* --- counterparty directory (corpus-wide, click a row to open profile) ------ */
+    var showAllDir = false;
+    function renderDirectory() {
+      var rows = {};
+      events.forEach(function (ev) {
+        parties(ev).forEach(function (p) {
+          var r = rows[p] || (rows[p] = { name: p, n: 0, mw: 0, money: 0, last: "" });
+          r.n += 1;
+          r.mw += mwOf(ev) || 0;
+          r.money += moneyOf(ev) || 0;
+          if (ev.date && ev.date > r.last) r.last = ev.date;
+        });
+      });
+      var list = Object.keys(rows).map(function (k) { return rows[k]; })
+        .sort(function (a, b) { return b.mw - a.mw || b.n - a.n; });
+      var shown = showAllDir ? list : list.slice(0, 12);
+      el("dash-directory").innerHTML =
+        '<div class="dash-table-wrap"><table class="dir-table"><thead><tr>' +
+        "<th>Counterparty</th><th>Kind</th><th class='num'>Events</th>" +
+        "<th class='num'>Announced MW</th><th class='num'>Disclosed $</th><th>Last activity</th>" +
+        "</tr></thead><tbody>" +
+        shown.map(function (r) {
+          var active = state.party === r.name;
+          return '<tr class="dir-row' + (active ? " dir-active" : "") + '" data-party="' + esc(r.name) + '">' +
+            "<td><strong>" + esc(r.name) + "</strong></td>" +
+            '<td><span class="pill pill-neutral">' + esc(partyKindMap[r.name] || "—") + "</span></td>" +
+            '<td class="num">' + fmt(r.n) + "</td>" +
+            '<td class="num">' + (r.mw ? fmt(Math.round(r.mw)) : "—") + "</td>" +
+            '<td class="num">' + (r.money ? moneyLabel(r.money) : "—") + "</td>" +
+            "<td>" + esc(r.last || "—") + "</td></tr>";
+        }).join("") +
+        "</tbody></table></div>" +
+        (list.length > 12
+          ? '<button type="button" class="dir-more" id="dir-more">' +
+            (showAllDir ? "Show top 12" : "Show all " + list.length + " counterparties") + "</button>"
+          : "") +
+        '<p class="bd-hint">Corpus-wide totals (unaffected by filters). Announced MW sums each event’s largest campus figure and may double-count re-announcements. Click a row for the profile.</p>';
+      var more = el("dir-more");
+      if (more) more.addEventListener("click", function () { showAllDir = !showAllDir; renderDirectory(); });
+    }
+    el("dash-directory").addEventListener("click", function (e) {
+      var row = e.target.closest ? e.target.closest(".dir-row") : null;
+      if (!row) return;
+      setFilter("party", row.dataset.party);
+      if (state.party) el("dash-entity").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
 
     /* --- breakdown bars (clickable = cross-filter) ---------------------------- */
     function barRows(pairs, unit, filterKey) {
@@ -725,6 +910,11 @@
       });
       el("view-dashboard").hidden = view !== "dashboard";
       el("view-research").hidden = view !== "research";
+      if (view === "dashboard") {
+        // Leaflet sizes itself to its container; if the map initialized while
+        // this view was hidden, poke it so it measures the real width.
+        try { window.dispatchEvent(new Event("resize")); } catch (e) { /* old browser */ }
+      }
       if (history.replaceState) history.replaceState(null, "", view === "research" ? "#research" : "#");
     }
     btns.forEach(function (b) {

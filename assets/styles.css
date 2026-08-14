@@ -373,6 +373,47 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
   font-size: 0.6rem; color: var(--slate-lt); padding-top: 4px; white-space: nowrap; }
 .tl-card .tl-chart { margin-bottom: 20px; }
 
+/* --- dashboard: activity map --------------------------------------------------- */
+
+.dash-map { border: 1px solid var(--rule); background: var(--surface); margin-bottom: 8px; }
+.dash-map[hidden] { display: none; }
+#map-canvas { height: 420px; }
+.map-note { font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; color: var(--slate-lt);
+  margin: 0; padding: 10px 14px; border-top: 1px solid var(--rule-soft); }
+.leaflet-container { font-family: "IBM Plex Sans", sans-serif; }
+.leaflet-tooltip { font-size: 0.78rem; line-height: 1.4; }
+
+/* --- dashboard: pipeline board -------------------------------------------------- */
+
+.pl-board { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+  grid-template-columns: repeat(6, minmax(150px, 1fr)); overflow-x: auto; }
+.pl-col { background: var(--surface); padding: 14px 14px 12px; min-width: 0; }
+.pl-head h3 { font-family: "Archivo", sans-serif; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); margin: 0 0 3px; }
+.pl-stats { font-family: "IBM Plex Mono", monospace; font-size: 0.66rem; color: var(--slate);
+  margin-bottom: 12px; }
+.pl-type { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 0; border-top: 1px solid var(--rule-soft); }
+.pl-count { font-family: "IBM Plex Mono", monospace; font-size: 0.74rem; color: var(--slate);
+  font-variant-numeric: tabular-nums; }
+.pl-risk { margin-top: 10px; border: 1px solid #E3B4AE; border-left: 3px solid var(--signal);
+  background: var(--signal-bg); color: #8A2E24; font-size: 0.82rem; padding: 10px 14px;
+  cursor: pointer; }
+.pl-risk:hover { border-color: var(--signal); }
+.pl-risk strong { text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; }
+
+/* --- dashboard: counterparty directory ------------------------------------------- */
+
+.dir-table { min-width: 640px; }
+.dir-row { cursor: pointer; }
+.dir-row:hover td { background: #FBFBFA; }
+.dir-active td { background: var(--signal-bg); }
+.dir-more { margin-top: 12px; font-family: "Archivo", sans-serif; font-weight: 700;
+  font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  color: var(--slate); border: 1px solid var(--rule); background: var(--surface);
+  padding: 7px 12px; border-radius: 2px; }
+.dir-more:hover { color: var(--signal); border-color: var(--signal); }
+
 /* --- dashboard: cross-filtering ----------------------------------------------- */
 
 .bd-click { cursor: pointer; }
@@ -470,6 +511,8 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
   .dash-filters select, .dash-filters input { flex: 1 1 auto; min-width: 0; }
   .ent-row > .metric-label { min-width: 0; }
   .dash-toolbar { gap: 10px; }
+  #map-canvas { height: 300px; }
+  .pl-board { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
