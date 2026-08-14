@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Center Market Intelligence</title>
-<meta name="description" content="Public-source market intelligence across supply/demand, power, capital markets, counterparty, and public equities.">
+<meta name="description" content="Public-source market intelligence: a live, filterable events dashboard plus research across supply/demand, power, capital markets, counterparty, and public equities.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -25,34 +25,92 @@
   </div>
 </header>
 
-<section class="hero">
+<nav class="view-switcher" aria-label="Site sections">
+  <div class="wrap view-switcher-inner">
+    <button class="view-btn" data-view="dashboard" aria-selected="true">Dashboard</button>
+    <button class="view-btn" data-view="research" aria-selected="false">Research</button>
+  </div>
+</nav>
+
+<section id="view-dashboard">
   <div class="wrap">
-    <p class="eyebrow">The constraint</p>
-    <p class="ratio-figure" id="ratio">—</p>
-    <p class="ratio-caption" id="ratio-caption"></p>
-    <div class="scale" id="scale"></div>
+
+    <div class="dash-notice">
+      <strong>Machine-collected, rule-typed. Not verified.</strong>
+      Every event links to its source article — read before you rely on a figure.
+      <span id="dash-source-health"></span>
+    </div>
+
+    <div class="dash-summary" id="dash-summary"></div>
+
+    <div class="dash-timeline" id="dash-timeline"></div>
+
+    <div class="dash-breakdowns" id="dash-breakdowns"></div>
+
+    <h2 class="sec">Events</h2>
+    <div class="dash-filters" id="dash-filters"></div>
+    <div class="dash-toolbar" id="dash-toolbar"></div>
+    <div class="dash-active" id="dash-active"></div>
+
+    <div class="dash-entity" id="dash-entity" hidden></div>
+
+    <div class="dash-table-wrap">
+      <table id="dash-table">
+        <thead>
+          <tr>
+            <th class="pin-col" title="Pinned">★</th>
+            <th data-sort="date">Date</th>
+            <th data-sort="event_type">Type</th>
+            <th>Headline</th>
+            <th data-sort="parties">Parties</th>
+            <th data-sort="metro">Location</th>
+            <th class="num" data-sort="mw">MW</th>
+            <th class="num" data-sort="money">$</th>
+            <th>Signals</th>
+            <th data-sort="source">Source</th>
+            <th class="num" data-sort="score">Score</th>
+          </tr>
+        </thead>
+        <tbody id="dash-tbody"></tbody>
+      </table>
+      <p class="dash-empty" id="dash-empty" hidden>No events match these filters.</p>
+    </div>
+
   </div>
 </section>
 
-<div class="tabs-outer">
-  <div class="wrap">
-    <div class="tabs" role="tablist" aria-label="Market layers">
-      <button class="tab" role="tab" data-panel="fundamentals"  aria-selected="false"><span class="n">01</span>Supply / Demand</button>
-      <button class="tab" role="tab" data-panel="power"         aria-selected="false"><span class="n">02</span>Power</button>
-      <button class="tab" role="tab" data-panel="capital"       aria-selected="false"><span class="n">03</span>Capital Markets</button>
-      <button class="tab" role="tab" data-panel="counterparty"  aria-selected="false"><span class="n">04</span>Counterparty</button>
-      <button class="tab" role="tab" data-panel="equities"      aria-selected="false"><span class="n">05</span>Public Equities</button>
+<section id="view-research" hidden>
+
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">The constraint</p>
+      <p class="ratio-figure" id="ratio">—</p>
+      <p class="ratio-caption" id="ratio-caption"></p>
+      <div class="scale" id="scale"></div>
+    </div>
+  </section>
+
+  <div class="tabs-outer">
+    <div class="wrap">
+      <div class="tabs" role="tablist" aria-label="Market layers">
+        <button class="tab" role="tab" data-panel="fundamentals"  aria-selected="false"><span class="n">01</span>Supply / Demand</button>
+        <button class="tab" role="tab" data-panel="power"         aria-selected="false"><span class="n">02</span>Power</button>
+        <button class="tab" role="tab" data-panel="capital"       aria-selected="false"><span class="n">03</span>Capital Markets</button>
+        <button class="tab" role="tab" data-panel="counterparty"  aria-selected="false"><span class="n">04</span>Counterparty</button>
+        <button class="tab" role="tab" data-panel="equities"      aria-selected="false"><span class="n">05</span>Public Equities</button>
+      </div>
     </div>
   </div>
-</div>
 
-<main class="wrap">
-  <section class="panel" id="panel-fundamentals" role="tabpanel" hidden></section>
-  <section class="panel" id="panel-power"        role="tabpanel" hidden></section>
-  <section class="panel" id="panel-capital"      role="tabpanel" hidden></section>
-  <section class="panel" id="panel-counterparty" role="tabpanel" hidden></section>
-  <section class="panel" id="panel-equities"     role="tabpanel" hidden></section>
-</main>
+  <main class="wrap">
+    <section class="panel" id="panel-fundamentals" role="tabpanel" hidden></section>
+    <section class="panel" id="panel-power"        role="tabpanel" hidden></section>
+    <section class="panel" id="panel-capital"      role="tabpanel" hidden></section>
+    <section class="panel" id="panel-counterparty" role="tabpanel" hidden></section>
+    <section class="panel" id="panel-equities"     role="tabpanel" hidden></section>
+  </main>
+
+</section>
 
 <footer>
   <div class="wrap">
@@ -66,6 +124,9 @@
 </footer>
 
 <script src="data/market-data.js"></script>
+<script src="data/feed.js"></script>
+<script>window.__initialHash = location.hash;</script>
 <script src="assets/app.js"></script>
+<script src="assets/dashboard.js"></script>
 </body>
 </html>

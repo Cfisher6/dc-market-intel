@@ -39,13 +39,18 @@ jobs:
           body: |
             Machine-collected. Rule-typed. **Not verified.**
 
+            `data/feed.js` is a persistent store — this run merges newly
+            collected events into what's already there (deduped by id).
+            Nothing is dropped, even if a feed failed this run.
+
             Before merging:
-            - Skim `digest.md` for anything worth promoting into `data/market-data.js`
+            - Skim `digest.md` for anything new worth a closer look — it's scoped to just this run's window
             - Check the source report at the top — a FAILED feed means a URL moved
             - Remember MW figures flagged `unstated` have not been confirmed as IT vs gross
 
-            Merging publishes the headline feed to the live site. It does not
-            change any curated figure.
+            Merging updates the live Dashboard (all collected events, unverified,
+            every row links to its source). It does not change any curated
+            figure in the Research view.
           add-paths: |
             data/feed.js
             digest.md

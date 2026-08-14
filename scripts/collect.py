@@ -13,7 +13,7 @@ detection and discarded. What persists is derived signals plus a link.
 Run:  python scripts/collect.py [--days 14] [--no-network]
 """
 
-import argparse, datetime as dt, hashlib, html, json, os, re, sys, urllib.parse
+import argparse, datetime as dt, hashlib, html, json, os, re, sys, time, urllib.parse
 from difflib import SequenceMatcher
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,11 +35,33 @@ def _feedparser():
 # fetch
 # ---------------------------------------------------------------------------
 
+# A descriptive User-Agent is table stakes for polite scraping and is
+# mandatory for SEC EDGAR specifically (https://www.sec.gov/os/webmaster-faq)
+# — requests without one are rejected outright.
+FEED_UA = "dc-market-intel/1.0 (public-source research; github.com/Cfisher6/dc-market-intel; contact cyrusconnor2109@gmail.com)"
+
+
+def _parse(url):
+    """Fetch via urllib with a compliant User-Agent, then hand the bytes to
+    feedparser. feedparser's own request_headers kwarg does not reliably
+    reach SEC EDGAR, which requires a descriptive UA and 403s the default
+    fetch outright — so we can't just call feedparser.parse(url) for it."""
+    import urllib.request
+    feedparser = _feedparser()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": FEED_UA})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read()
+    except Exception:
+        return feedparser.parse(b"")
+    return feedparser.parse(body)
+
+
 def discover_feed(homepage):
     """Try RSS autodiscovery when a direct feed URL fails."""
     import urllib.request
     try:
-        req = urllib.request.Request(homepage, headers={"User-Agent": "dc-intel/1.0 (+github pages research)"})
+        req = urllib.request.Request(homepage, headers={"User-Agent": FEED_UA})
         with urllib.request.urlopen(req, timeout=20) as r:
             body = r.read(400_000).decode("utf-8", "ignore")
     except Exception:
@@ -56,15 +78,17 @@ def fetch_sources(days):
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
     items, report = [], []
 
-    for src in O.SOURCES:
+    for i, src in enumerate(O.SOURCES):
+        if i:
+            time.sleep(1)  # polite spacing — avoids tripping burst rate limits (SEC EDGAR is strict about this)
         url, note = src["url"], "direct"
-        parsed = feedparser.parse(url)
+        parsed = _parse(url)
 
         if not parsed.entries and src.get("fallback"):
             found = discover_feed(src["fallback"])
             if found:
                 url, note = found, "autodiscovered"
-                parsed = feedparser.parse(url)
+                parsed = _parse(url)
 
         if not parsed.entries:
             report.append({"source": src["name"], "ok": False, "count": 0,
@@ -87,6 +111,7 @@ def fetch_sources(days):
                 "date": pub.date().isoformat() if pub else "",
                 "source": src["short"],
                 "source_full": src["name"],
+                "implied_party": src.get("implied_party"),
             })
             n += 1
         report.append({"source": src["name"], "ok": True, "count": n, "note": note, "url": url})
@@ -106,6 +131,36 @@ def norm_url(u):
 
 def norm_title(t):
     return re.sub(r"[^a-z0-9 ]", "", t.lower()).strip()
+
+def load_existing_events():
+    """Read the previously persisted event store, if any. Returns {id: event}."""
+    path = os.path.join(ROOT, "data", "feed.js")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = f.read()
+    m = re.search(r"window\.DC_FEED\s*=\s*(\{.*\});\s*$", raw, re.S)
+    if not m:
+        return {}
+    try:
+        payload = json.loads(m.group(1))
+    except Exception:
+        return {}
+    return {e["id"]: e for e in payload.get("events", [])}
+
+
+def merge_events(existing, new_events, run_ts):
+    """New events are added; events seen before keep their first_seen date
+    but get refreshed tags/score. Nothing is ever dropped here — that's a
+    judgment-pass decision, not the collector's job."""
+    merged = dict(existing)
+    for ev in new_events:
+        prev = merged.get(ev["id"])
+        ev["first_seen"] = prev.get("first_seen", run_ts) if prev else run_ts
+        ev["last_seen"] = run_ts
+        merged[ev["id"]] = ev
+    return list(merged.values())
+
 
 def dedupe(items):
     seen_urls, kept = set(), []
@@ -205,6 +260,18 @@ def classify_event(text):
 def is_noise(text):
     return any(has_term(text, n) for n in O.NOISE)
 
+def sec_item_hints(text):
+    """SEC filings cite Item numbers, not prose. Translate the codes present
+    into phrases the existing EVENT_RULES keywords already recognize."""
+    low = text.lower()
+    return " ".join(hint for code, hint in O.SEC_ITEM_HINTS.items() if code in low)
+
+def party_category(name):
+    for d in (O.HYPERSCALERS, O.NEOCLOUDS, O.OPERATORS, O.CAPITAL):
+        if name in d:
+            return d
+    return None
+
 # ---------------------------------------------------------------------------
 # score
 # ---------------------------------------------------------------------------
@@ -234,6 +301,7 @@ def build_events(items):
         text = it["title"] + " " + it["summary"]
         if is_noise(text):
             continue
+        text = text + " " + sec_item_hints(text)
         ev = {
             "id": hashlib.sha1(norm_url(it["url"]).encode()).hexdigest()[:10],
             "title": it["title"],
@@ -254,6 +322,15 @@ def build_events(items):
             "quantities": extract_quantities(text),
             "mw_basis": mw_basis(text),
         }
+        implied = it.get("implied_party")
+        if implied:
+            d = party_category(implied)
+            key = ("hyperscalers" if d is O.HYPERSCALERS else
+                   "neoclouds" if d is O.NEOCLOUDS else
+                   "operators" if d is O.OPERATORS else
+                   "capital" if d is O.CAPITAL else None)
+            if key and implied not in ev[key]:
+                ev[key] = sorted(ev[key] + [implied])
         ev["score"] = score(ev)
         events.append(ev)
     events.sort(key=lambda e: (-e["score"], e["date"]), reverse=False)
@@ -373,9 +450,20 @@ def main():
     else:
         items, report = fetch_sources(a.days)
 
-    events = build_events(dedupe(items))
-    n = write_feed(events, report, a.days)
-    write_digest(events, report, a.days)
+    new_events = build_events(dedupe(items))
+    existing = load_existing_events()
+
+    if a.no_network:
+        # Scaffolding runs must never wipe a real persisted store.
+        all_events = list(existing.values())
+    else:
+        run_ts = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        all_events = merge_events(existing, new_events, run_ts)
+        all_events.sort(key=lambda e: (-e["score"], e["date"]), reverse=False)
+        all_events.sort(key=lambda e: e["score"], reverse=True)
+
+    n = write_feed(all_events, report, a.days)
+    write_digest(new_events, report, a.days)
 
     for r in report:
         print(f"  {'ok ' if r['ok'] else 'FAIL'} {r['source']:<24} {r['count']:>4}  {r.get('note','')}")

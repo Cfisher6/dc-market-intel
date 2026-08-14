@@ -1,0 +1,738 @@
+/* Renders the events dashboard from window.DC_FEED, and owns the
+   Dashboard/Research view switcher. No framework, no build step.
+
+   Interaction model: every breakdown bar and tag chip is a filter. Clicking a
+   counterparty anywhere opens its profile card. Rows expand to full detail.
+   Pins persist in localStorage. The filtered set exports to CSV, and the
+   current view serializes to the URL query string for sharing. */
+(function () {
+  "use strict";
+
+  var F = window.DC_FEED;
+
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  };
+  var el = function (id) { return document.getElementById(id); };
+  var fmt = function (n) { return n == null ? "—" : n.toLocaleString("en-US"); };
+
+  var EVENT_TYPE_LABEL = {
+    "PLATFORM_M&A": "Platform M&A",
+    "FINANCING_CLOSED": "Financing closed",
+    "LEASE_SIGNED": "Lease signed",
+    "TENANT_DISCLOSED": "Tenant disclosed",
+    "POWER_SECURED": "Power secured",
+    "INTERCONNECT_FILED": "Interconnect filed",
+    "SITE_ACQUIRED": "Site acquired",
+    "DELAY_REPORTED": "Delay reported",
+    "EXPANSION_EXERCISED": "Expansion exercised",
+    "CAPACITY_ANNOUNCED": "Capacity announced",
+    "OTHER": "Other"
+  };
+  var EVENT_TYPE_COLOR = {
+    "PLATFORM_M&A": "red",
+    "FINANCING_CLOSED": "green",
+    "LEASE_SIGNED": "green",
+    "TENANT_DISCLOSED": "neutral",
+    "POWER_SECURED": "amber",
+    "INTERCONNECT_FILED": "amber",
+    "SITE_ACQUIRED": "ink",
+    "DELAY_REPORTED": "red",
+    "EXPANSION_EXERCISED": "green",
+    "CAPACITY_ANNOUNCED": "neutral",
+    "OTHER": "neutral"
+  };
+  var MW_BUCKETS = [0, 50, 100, 250, 500, 1000, 5000];
+  var MONEY_BUCKETS = [0, 10, 50, 250, 1000, 10000]; // $M
+  var SCORE_BUCKETS = [0, 4, 6, 8, 10];
+
+  var PIN_KEY = "dc_pins";
+
+  function typeLabel(t) { return EVENT_TYPE_LABEL[t] || t; }
+  function typeColor(t) { return EVENT_TYPE_COLOR[t] || "neutral"; }
+
+  function mwOf(ev) {
+    var mw = ev.quantities && ev.quantities.mw_campus;
+    return mw && mw.length ? Math.max.apply(null, mw) : null;
+  }
+  function aggMwOf(ev) {
+    var mw = ev.quantities && ev.quantities.mw_aggregate;
+    return mw && mw.length ? Math.max.apply(null, mw) : null;
+  }
+  function moneyOf(ev) {
+    var m = ev.quantities && ev.quantities.money_musd;
+    return m && m.length ? Math.max.apply(null, m) : null;
+  }
+  function moneyLabel(v) {
+    if (v == null) return "—";
+    return v >= 1000 ? "$" + (v / 1000).toFixed(1) + "B" : "$" + fmt(Math.round(v)) + "M";
+  }
+  function parties(ev) {
+    return [].concat(ev.hyperscalers || [], ev.neoclouds || [], ev.operators || [], ev.capital || []);
+  }
+  function uniqueSorted(arr) {
+    var seen = {}, out = [];
+    arr.forEach(function (v) { if (v && !seen[v]) { seen[v] = 1; out.push(v); } });
+    return out.sort();
+  }
+  function srcLink(url, label) {
+    if (!url) return esc(label || "");
+    return '<a class="src-inline" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(label || "source") + "</a>";
+  }
+  function firstSeen(ev) { return ev.first_seen || ev.date || ""; }
+
+  function loadPins() {
+    try { return JSON.parse(localStorage.getItem(PIN_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function savePins(p) {
+    try { localStorage.setItem(PIN_KEY, JSON.stringify(p)); } catch (e) { /* private mode */ }
+  }
+
+  if (!F || !F.events) {
+    var dash = el("view-dashboard");
+    if (dash) dash.innerHTML = '<div class="wrap"><p style="padding:40px 0">data/feed.js failed to load — run scripts/collect.py.</p></div>';
+  } else {
+    initDashboard(F);
+  }
+
+  function initDashboard(F) {
+    var events = F.events;
+    var latestRun = (F.generated || "").slice(0, 10);
+    var pins = loadPins();
+    var expanded = {}; // event id -> bool
+
+    var DEFAULTS = { type: "", party: "", metro: "", power: "", mwMin: 0, moneyMin: 0, scoreMin: 0,
+                     from: "", to: "", q: "", newOnly: false, pinnedOnly: false, sort: "score", dir: "desc" };
+    var state = readStateFromURL();
+
+    /* --- party -> kind, derived from event membership ---------------------- */
+    var partyKindMap = {};
+    events.forEach(function (ev) {
+      (ev.hyperscalers || []).forEach(function (p) { partyKindMap[p] = partyKindMap[p] || "hyperscaler"; });
+      (ev.neoclouds || []).forEach(function (p) { partyKindMap[p] = partyKindMap[p] || "neocloud"; });
+      (ev.operators || []).forEach(function (p) { partyKindMap[p] = partyKindMap[p] || "operator"; });
+      (ev.capital || []).forEach(function (p) { partyKindMap[p] = partyKindMap[p] || "capital"; });
+    });
+
+    /* --- source health ----------------------------------------------------- */
+    var ok = F.sources.filter(function (r) { return r.ok; });
+    var bad = F.sources.filter(function (r) { return !r.ok; });
+    el("dash-source-health").textContent =
+      "Sources: " + ok.length + "/" + F.sources.length + " feeds ok" +
+      (bad.length ? " — " + bad.map(function (r) { return r.source; }).join(", ") + " failed" : "") +
+      ". Last run " + latestRun + ".";
+
+    /* --- filter option lists ----------------------------------------------- */
+    var allTypes = uniqueSorted(events.map(function (e) { return e.event_type; }));
+    var allParties = uniqueSorted(events.reduce(function (a, e) { return a.concat(parties(e)); }, []));
+    var allMetros = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.metros || []); }, []));
+    var allPower = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.power_entities || []); }, []));
+
+    renderFilters(allTypes, allParties, allMetros, allPower);
+    renderToolbar();
+    syncControls();
+    rerender();
+
+    /* --- matching / sorting ------------------------------------------------ */
+    function haystack(ev) {
+      return (ev.title + " " + parties(ev).join(" ") + " " + (ev.metros || []).join(" ") + " " +
+              (ev.power_entities || []).join(" ")).toLowerCase();
+    }
+    function matches(ev) {
+      if (state.type && ev.event_type !== state.type) return false;
+      if (state.party && parties(ev).indexOf(state.party) === -1) return false;
+      if (state.metro && (ev.metros || []).indexOf(state.metro) === -1) return false;
+      if (state.power && (ev.power_entities || []).indexOf(state.power) === -1) return false;
+      if (state.mwMin) { var mw = mwOf(ev); if (!mw || mw < state.mwMin) return false; }
+      if (state.moneyMin) { var mo = moneyOf(ev); if (!mo || mo < state.moneyMin) return false; }
+      if (state.scoreMin && ev.score < state.scoreMin) return false;
+      if (state.from && (!ev.date || ev.date < state.from)) return false;
+      if (state.to && (!ev.date || ev.date > state.to)) return false;
+      if (state.newOnly && firstSeen(ev) !== latestRun) return false;
+      if (state.pinnedOnly && !pins[ev.id]) return false;
+      if (state.q && haystack(ev).indexOf(state.q) === -1) return false;
+      return true;
+    }
+
+    function sortList(list) {
+      var key = state.sort, dir = state.dir === "asc" ? 1 : -1;
+      return list.slice().sort(function (a, b) {
+        var av, bv;
+        if (key === "date") { av = a.date || ""; bv = b.date || ""; }
+        else if (key === "first_seen") { av = firstSeen(a); bv = firstSeen(b); }
+        else if (key === "mw") { av = mwOf(a) || 0; bv = mwOf(b) || 0; }
+        else if (key === "money") { av = moneyOf(a) || 0; bv = moneyOf(b) || 0; }
+        else if (key === "event_type") { av = typeLabel(a.event_type); bv = typeLabel(b.event_type); }
+        else if (key === "parties") { av = parties(a).join(); bv = parties(b).join(); }
+        else if (key === "metro") { av = (a.metros || []).join(); bv = (b.metros || []).join(); }
+        else if (key === "source") { av = a.source; bv = b.source; }
+        else { av = a.score; bv = b.score; }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+
+    function rerender() {
+      var filtered = sortList(events.filter(matches));
+      renderSummary(filtered);
+      renderTimeline(filtered);
+      renderBreakdowns(filtered);
+      renderActiveChips();
+      renderEntityCard();
+      renderTable(filtered);
+    }
+
+    /* --- state <-> URL ----------------------------------------------------- */
+    function readStateFromURL() {
+      var s = {};
+      for (var k in DEFAULTS) s[k] = DEFAULTS[k];
+      try {
+        var p = new URLSearchParams(location.search);
+        if (p.get("type")) s.type = p.get("type");
+        if (p.get("party")) s.party = p.get("party");
+        if (p.get("metro")) s.metro = p.get("metro");
+        if (p.get("power")) s.power = p.get("power");
+        if (p.get("mw")) s.mwMin = Number(p.get("mw")) || 0;
+        if (p.get("money")) s.moneyMin = Number(p.get("money")) || 0;
+        if (p.get("scoremin")) s.scoreMin = Number(p.get("scoremin")) || 0;
+        if (p.get("from")) s.from = p.get("from");
+        if (p.get("to")) s.to = p.get("to");
+        if (p.get("q")) s.q = p.get("q").toLowerCase();
+        if (p.get("new") === "1") s.newOnly = true;
+        if (p.get("sort")) s.sort = p.get("sort");
+        if (p.get("dir")) s.dir = p.get("dir");
+      } catch (e) { /* old browser: defaults */ }
+      return s;
+    }
+    function viewURL() {
+      var base = location.href.split("?")[0].split("#")[0];
+      var p = [];
+      function add(k, v) { p.push(k + "=" + encodeURIComponent(v)); }
+      if (state.type) add("type", state.type);
+      if (state.party) add("party", state.party);
+      if (state.metro) add("metro", state.metro);
+      if (state.power) add("power", state.power);
+      if (state.mwMin) add("mw", state.mwMin);
+      if (state.moneyMin) add("money", state.moneyMin);
+      if (state.scoreMin) add("scoremin", state.scoreMin);
+      if (state.from) add("from", state.from);
+      if (state.to) add("to", state.to);
+      if (state.q) add("q", state.q);
+      if (state.newOnly) add("new", "1");
+      if (state.sort !== "score") add("sort", state.sort);
+      if (state.dir !== "desc") add("dir", state.dir);
+      return p.length ? base + "?" + p.join("&") : base;
+    }
+
+    /* --- filter bar --------------------------------------------------------- */
+    function renderFilters(types, partiesList, metros, powerEntities) {
+      function opts(list, allLabel, labelFn) {
+        return '<option value="">' + allLabel + "</option>" + list.map(function (v) {
+          return '<option value="' + esc(v) + '">' + esc(labelFn ? labelFn(v) : v) + "</option>";
+        }).join("");
+      }
+      el("dash-filters").innerHTML =
+        '<select id="f-type" aria-label="Event type">' + opts(types, "All types", typeLabel) + "</select>" +
+        '<select id="f-party" aria-label="Customer / party">' + opts(partiesList, "All parties") + "</select>" +
+        '<select id="f-metro" aria-label="Location">' + opts(metros, "All locations") + "</select>" +
+        '<select id="f-power" aria-label="Power entity">' + opts(powerEntities, "All power entities") + "</select>" +
+        '<select id="f-mw" aria-label="Minimum MW">' +
+          MW_BUCKETS.map(function (v) { return '<option value="' + v + '">' + (v === 0 ? "Any MW" : v.toLocaleString() + "+ MW") + "</option>"; }).join("") +
+        "</select>" +
+        '<select id="f-money" aria-label="Minimum deal size">' +
+          MONEY_BUCKETS.map(function (v) { return '<option value="' + v + '">' + (v === 0 ? "Any $" : moneyLabel(v) + "+") + "</option>"; }).join("") +
+        "</select>" +
+        '<select id="f-score" aria-label="Minimum score">' +
+          SCORE_BUCKETS.map(function (v) { return '<option value="' + v + '">' + (v === 0 ? "Any score" : "Score " + v + "+") + "</option>"; }).join("") +
+        "</select>" +
+        '<input id="f-from" type="date" aria-label="From date" title="From date">' +
+        '<input id="f-to" type="date" aria-label="To date" title="To date">' +
+        '<input id="f-q" type="search" placeholder="Search headlines &amp; tags…" aria-label="Search headlines and tags">' +
+        '<select id="f-sort" aria-label="Sort by">' +
+          '<option value="score">Sort: Score</option>' +
+          '<option value="date">Sort: Date</option>' +
+          '<option value="first_seen">Sort: Newest found</option>' +
+          '<option value="mw">Sort: MW</option>' +
+          '<option value="money">Sort: Deal size</option>' +
+        "</select>" +
+        '<button id="f-reset" type="button">Reset</button>';
+
+      function bind(id, key, parse) {
+        el(id).addEventListener("change", function () {
+          state[key] = parse ? parse(this.value) : this.value;
+          rerender();
+        });
+      }
+      bind("f-type", "type");
+      bind("f-party", "party");
+      bind("f-metro", "metro");
+      bind("f-power", "power");
+      bind("f-mw", "mwMin", Number);
+      bind("f-money", "moneyMin", Number);
+      bind("f-score", "scoreMin", Number);
+      bind("f-from", "from");
+      bind("f-to", "to");
+      bind("f-sort", "sort");
+      el("f-q").addEventListener("input", function () {
+        state.q = this.value.trim().toLowerCase();
+        rerender();
+      });
+      el("f-reset").addEventListener("click", function () {
+        for (var k in DEFAULTS) state[k] = DEFAULTS[k];
+        syncControls();
+        rerender();
+      });
+    }
+
+    /* --- toolbar: toggles + export + share ---------------------------------- */
+    function renderToolbar() {
+      el("dash-toolbar").innerHTML =
+        '<label class="tog"><input type="checkbox" id="f-new"> New this run</label>' +
+        '<label class="tog"><input type="checkbox" id="f-pinned"> Pinned only</label>' +
+        '<span class="toolbar-spacer"></span>' +
+        '<button id="f-csv" type="button" title="Download the filtered set as CSV">Export CSV</button>' +
+        '<button id="f-share" type="button" title="Copy a link that reopens this exact view">Copy view link</button>';
+
+      el("f-new").addEventListener("change", function () { state.newOnly = this.checked; rerender(); });
+      el("f-pinned").addEventListener("change", function () { state.pinnedOnly = this.checked; rerender(); });
+      el("f-csv").addEventListener("click", exportCSV);
+      el("f-share").addEventListener("click", function () {
+        var url = viewURL();
+        var btn = this;
+        function done() {
+          btn.textContent = "Copied ✓";
+          setTimeout(function () { btn.textContent = "Copy view link"; }, 1600);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, function () { window.prompt("Copy this link:", url); });
+        } else {
+          window.prompt("Copy this link:", url);
+        }
+      });
+    }
+
+    function syncControls() {
+      el("f-type").value = state.type;
+      el("f-party").value = state.party;
+      el("f-metro").value = state.metro;
+      el("f-power").value = state.power;
+      el("f-mw").value = String(state.mwMin);
+      el("f-money").value = String(state.moneyMin);
+      el("f-score").value = String(state.scoreMin);
+      el("f-from").value = state.from;
+      el("f-to").value = state.to;
+      el("f-q").value = state.q;
+      el("f-sort").value = ["score", "date", "first_seen", "mw", "money"].indexOf(state.sort) >= 0 ? state.sort : "score";
+      el("f-new").checked = state.newOnly;
+      el("f-pinned").checked = state.pinnedOnly;
+    }
+
+    /* --- one place to change a filter from anywhere -------------------------- */
+    function setFilter(key, value) {
+      state[key] = state[key] === value ? (typeof DEFAULTS[key] === "number" ? 0 : "") : value; // click again = clear
+      syncControls();
+      rerender();
+    }
+
+    /* --- KPI cards (reflect current filter) ---------------------------------- */
+    function renderSummary(filtered) {
+      var mwSum = 0, moneySum = 0, newCount = 0;
+      filtered.forEach(function (ev) {
+        mwSum += mwOf(ev) || 0;
+        moneySum += moneyOf(ev) || 0;
+        if (firstSeen(ev) === latestRun) newCount++;
+      });
+      el("dash-summary").innerHTML = '<div class="metrics">' +
+        metric("Events", fmt(filtered.length) + (filtered.length !== events.length ? " of " + fmt(events.length) : ""),
+               filtered.length !== events.length ? "Matching current filters" : "Accumulated across all collector runs") +
+        metric("Announced MW", mwSum ? fmt(Math.round(mwSum)) : "—",
+               "Σ of each event's largest campus figure — announced, not verified; may double-count re-announcements") +
+        metric("Disclosed value", moneySum ? moneyLabel(moneySum) : "—",
+               "Σ of disclosed deal / project figures in the filtered set") +
+        metric("New this run", fmt(newCount), "First seen " + latestRun) +
+        "</div>";
+    }
+    function metric(label, value, note) {
+      return '<div class="metric"><div class="metric-label">' + esc(label) + '</div>' +
+        '<div class="metric-value">' + esc(value) + '</div>' +
+        (note ? '<div class="metric-note">' + esc(note) + '</div>' : "") + '</div>';
+    }
+
+    /* --- weekly activity timeline -------------------------------------------- */
+    function weekOf(dateStr) {
+      // Monday of the ISO week containing dateStr.
+      var d = new Date(dateStr + "T00:00:00Z");
+      if (isNaN(d)) return null;
+      var day = (d.getUTCDay() + 6) % 7; // Mon=0
+      d.setUTCDate(d.getUTCDate() - day);
+      return d.toISOString().slice(0, 10);
+    }
+    function renderTimeline(filtered) {
+      var byWeek = {};
+      filtered.forEach(function (ev) {
+        var w = ev.date ? weekOf(ev.date) : null;
+        if (!w) return;
+        var r = byWeek[w] || (byWeek[w] = { n: 0, mw: 0 });
+        r.n += 1;
+        r.mw += mwOf(ev) || 0;
+      });
+      var weeks = Object.keys(byWeek).sort();
+      if (weeks.length < 2) { el("dash-timeline").innerHTML = ""; return; }
+
+      // fill gaps so the x-axis is continuous
+      var run = [], cur = weeks[0], last = weeks[weeks.length - 1];
+      while (cur <= last) {
+        run.push(cur);
+        var d = new Date(cur + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + 7);
+        cur = d.toISOString().slice(0, 10);
+        if (run.length > 120) break; // safety
+      }
+
+      function chart(title, valFn, unit) {
+        var vals = run.map(function (w) { return byWeek[w] ? valFn(byWeek[w]) : 0; });
+        var max = Math.max.apply(null, vals.concat([1]));
+        var lastMonth = "";
+        var cols = run.map(function (w, i) {
+          var v = vals[i];
+          var month = w.slice(0, 7);
+          var lab = "";
+          if (month !== lastMonth) {
+            lastMonth = month;
+            lab = new Date(w + "T00:00:00Z").toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+          }
+          return '<div class="tl-col" title="Week of ' + esc(w) + " — " + fmt(Math.round(v)) + (unit ? " " + unit : "") + '">' +
+            '<div class="tl-fill" style="height:' + Math.max((v / max) * 100, v > 0 ? 3 : 0) + '%"></div>' +
+            '<div class="tl-lab">' + lab + "</div></div>";
+        }).join("");
+        return '<div class="tl-card"><h3>' + esc(title) + '</h3><div class="tl-chart">' + cols + "</div></div>";
+      }
+
+      el("dash-timeline").innerHTML =
+        chart("Events per week", function (r) { return r.n; }) +
+        chart("Announced MW per week", function (r) { return r.mw; }, "MW");
+    }
+
+    /* --- breakdown bars (clickable = cross-filter) ---------------------------- */
+    function barRows(pairs, unit, filterKey) {
+      var max = Math.max.apply(null, pairs.map(function (p) { return p[1]; }).concat([1]));
+      return pairs.map(function (p) {
+        var active = filterKey && state[filterKey] === p[2];
+        return '<div class="bd-row' + (filterKey ? " bd-click" : "") + (active ? " bd-active" : "") + '"' +
+          (filterKey ? ' role="button" tabindex="0" data-fkey="' + esc(filterKey) + '" data-fval="' + esc(p[2]) + '"' : "") + ">" +
+          '<div class="bd-label">' + esc(p[0]) + '</div>' +
+          '<div class="bd-track"><div class="bd-fill" style="width:' + Math.max((p[1] / max) * 100, 2) + '%"></div></div>' +
+          '<div class="bd-value">' + fmt(p[1]) + (unit ? " " + unit : "") + '</div></div>';
+      }).join("");
+    }
+    function tally(list, keyFn) {
+      var counts = {};
+      list.forEach(function (ev) {
+        (keyFn(ev) || []).forEach(function (k) { counts[k] = (counts[k] || 0) + 1; });
+      });
+      return Object.keys(counts).map(function (k) { return [k, counts[k]]; })
+        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+    }
+    function mwByParty(list) {
+      var mw = {};
+      list.forEach(function (ev) {
+        var v = mwOf(ev);
+        if (!v) return;
+        parties(ev).forEach(function (p) { mw[p] = (mw[p] || 0) + v; });
+      });
+      return Object.keys(mw).map(function (k) { return [k, Math.round(mw[k])]; })
+        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+    }
+
+    function renderBreakdowns(filtered) {
+      var byType = tally(filtered, function (e) { return [e.event_type]; })
+        .map(function (p) { return [typeLabel(p[0]), p[1], p[0]]; });
+      var byMetro = tally(filtered, function (e) { return e.metros; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
+      var byPower = tally(filtered, function (e) { return e.power_entities; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
+      var byMW = mwByParty(filtered).map(function (p) { return [p[0], p[1], p[0]]; });
+
+      el("dash-breakdowns").innerHTML = '<div class="bd-grid">' +
+        breakdownCard("Events by type", byType.length ? barRows(byType, "", "type") : emptyNote()) +
+        breakdownCard("Events by location", byMetro.length ? barRows(byMetro, "", "metro") : emptyNote()) +
+        breakdownCard("MW by counterparty", byMW.length ? barRows(byMW, "MW", "party") : emptyNote()) +
+        breakdownCard("Events by power entity", byPower.length ? barRows(byPower, "", "power") : emptyNote()) +
+        "</div>" +
+        '<p class="bd-hint">Bars, party and location tags are filters — click to apply, click again to clear.</p>';
+    }
+    function breakdownCard(title, body) {
+      return '<div class="bd-card"><h3>' + esc(title) + "</h3>" + body + "</div>";
+    }
+    function emptyNote() { return '<p class="bd-empty">No matches in current filter.</p>'; }
+
+    el("dash-breakdowns").addEventListener("click", function (e) {
+      var row = e.target.closest ? e.target.closest(".bd-click") : null;
+      if (row) setFilter(row.dataset.fkey, row.dataset.fval);
+    });
+    el("dash-breakdowns").addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var row = e.target.closest ? e.target.closest(".bd-click") : null;
+      if (row) { e.preventDefault(); setFilter(row.dataset.fkey, row.dataset.fval); }
+    });
+
+    /* --- active filter chips -------------------------------------------------- */
+    function renderActiveChips() {
+      var chips = [];
+      function chip(label, key) {
+        chips.push('<button type="button" class="afchip" data-clear="' + esc(key) + '">' + esc(label) + " ✕</button>");
+      }
+      if (state.type) chip(typeLabel(state.type), "type");
+      if (state.party) chip(state.party, "party");
+      if (state.metro) chip(state.metro, "metro");
+      if (state.power) chip(state.power, "power");
+      if (state.mwMin) chip(fmt(state.mwMin) + "+ MW", "mwMin");
+      if (state.moneyMin) chip(moneyLabel(state.moneyMin) + "+", "moneyMin");
+      if (state.scoreMin) chip("Score " + state.scoreMin + "+", "scoreMin");
+      if (state.from) chip("From " + state.from, "from");
+      if (state.to) chip("To " + state.to, "to");
+      if (state.q) chip('"' + state.q + '"', "q");
+      if (state.newOnly) chip("New this run", "newOnly");
+      if (state.pinnedOnly) chip("Pinned", "pinnedOnly");
+      el("dash-active").innerHTML = chips.length
+        ? '<span class="af-label">Active:</span>' + chips.join("")
+        : "";
+    }
+    el("dash-active").addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".afchip") : null;
+      if (!b) return;
+      var key = b.dataset.clear;
+      state[key] = typeof DEFAULTS[key] === "boolean" ? false : (typeof DEFAULTS[key] === "number" ? 0 : "");
+      syncControls();
+      rerender();
+    });
+
+    /* --- counterparty profile card -------------------------------------------- */
+    function renderEntityCard() {
+      var card = el("dash-entity");
+      if (!state.party) { card.hidden = true; card.innerHTML = ""; return; }
+      var name = state.party;
+      var evs = events.filter(function (ev) { return parties(ev).indexOf(name) !== -1; });
+      var mwSum = 0, moneySum = 0, dates = [];
+      var typeMix = {}, metroMix = {}, coParties = {};
+      evs.forEach(function (ev) {
+        mwSum += mwOf(ev) || 0;
+        moneySum += moneyOf(ev) || 0;
+        if (ev.date) dates.push(ev.date);
+        typeMix[ev.event_type] = (typeMix[ev.event_type] || 0) + 1;
+        (ev.metros || []).forEach(function (m) { metroMix[m] = (metroMix[m] || 0) + 1; });
+        parties(ev).forEach(function (p) { if (p !== name) coParties[p] = (coParties[p] || 0) + 1; });
+      });
+      dates.sort();
+      function top(obj, n) {
+        return Object.keys(obj).map(function (k) { return [k, obj[k]]; })
+          .sort(function (a, b) { return b[1] - a[1]; }).slice(0, n);
+      }
+      var kind = partyKindMap[name] || "";
+      card.hidden = false;
+      card.innerHTML =
+        '<div class="ent-head"><h3>' + esc(name) + "</h3>" +
+          (kind ? '<span class="pill pill-neutral">' + esc(kind) + "</span>" : "") +
+          '<span class="ent-note">All ' + fmt(evs.length) + " tracked events for this counterparty, ignoring other filters</span>" +
+          '<button type="button" class="ent-close" id="ent-close" title="Clear counterparty filter">✕</button></div>' +
+        '<div class="ent-grid">' +
+          entStat("Events", fmt(evs.length)) +
+          entStat("Announced MW", mwSum ? fmt(Math.round(mwSum)) : "—") +
+          entStat("Disclosed value", moneySum ? moneyLabel(moneySum) : "—") +
+          entStat("Activity span", dates.length ? dates[0] + " → " + dates[dates.length - 1] : "—") +
+        "</div>" +
+        '<div class="ent-rows">' +
+          entRow("Event mix", top(typeMix, 4).map(function (p) {
+            return '<span class="pill pill-' + typeColor(p[0]) + '">' + esc(typeLabel(p[0])) + " ×" + p[1] + "</span>";
+          }).join(" ")) +
+          entRow("Locations", top(metroMix, 4).map(function (p) {
+            return '<span class="chip chip-metro" data-metro="' + esc(p[0]) + '">' + esc(p[0]) + " ×" + p[1] + "</span>";
+          }).join(" ") || "—") +
+          entRow("Appears alongside", top(coParties, 5).map(function (p) {
+            return '<span class="chip" data-party="' + esc(p[0]) + '">' + esc(p[0]) + " ×" + p[1] + "</span>";
+          }).join(" ") || "—") +
+        "</div>";
+      var close = el("ent-close");
+      if (close) close.addEventListener("click", function () { setFilter("party", state.party); });
+    }
+    function entStat(label, value) {
+      return '<div class="ent-stat"><div class="metric-label">' + esc(label) + '</div><div class="ent-value">' + esc(value) + "</div></div>";
+    }
+    function entRow(label, body) {
+      return '<div class="ent-row"><span class="metric-label">' + esc(label) + "</span><span>" + body + "</span></div>";
+    }
+    el("dash-entity").addEventListener("click", function (e) {
+      var t = e.target;
+      if (t.dataset && t.dataset.party) setFilter("party", t.dataset.party);
+      else if (t.dataset && t.dataset.metro) setFilter("metro", t.dataset.metro);
+    });
+
+    /* --- table ----------------------------------------------------------------- */
+    function signalBadges(ev) {
+      var out = [];
+      if ((ev.commercial_signals || []).indexOf("guarantee") >= 0) out.push('<span class="sig sig-red" title="Guarantee / credit-support language present">guarantee</span>');
+      if ((ev.commercial_signals || []).indexOf("prelease") >= 0) out.push('<span class="sig sig-green" title="Prelease / precommitment language present">prelease</span>');
+      if ((ev.also_in || []).length) out.push('<span class="sig" title="Also reported by: ' + esc(ev.also_in.join(", ")) + '">×' + (ev.also_in.length + 1) + " src</span>");
+      return out.join(" ");
+    }
+    function mwCell(ev) {
+      var mw = mwOf(ev);
+      if (mw) {
+        var basis = ev.mw_basis && ev.mw_basis !== "unstated" ? ' <span class="mw-basis">' + esc(ev.mw_basis) + "</span>" : "";
+        return fmt(mw) + basis;
+      }
+      var agg = aggMwOf(ev);
+      if (agg) return '<span class="mw-agg" title="Market/queue aggregate, not a campus figure">' + fmt(agg) + " agg</span>";
+      return "—";
+    }
+
+    function detailRow(ev) {
+      var q = ev.quantities || {};
+      function dl(label, val) {
+        return val ? '<div class="det-item"><span class="metric-label">' + label + "</span> " + val + "</div>" : "";
+      }
+      return '<td colspan="11"><div class="det-grid">' +
+        dl("First seen", esc(firstSeen(ev))) +
+        dl("Last seen", esc(ev.last_seen || "")) +
+        dl("MW figures", (q.mw_campus || []).map(fmt).join(", ")) +
+        dl("MW basis", ev.mw_basis !== "unstated" ? esc(ev.mw_basis) : "unstated — not confirmed IT vs gross") +
+        dl("Aggregate/queue MW", (q.mw_aggregate || []).map(fmt).join(", ")) +
+        dl("$ figures", (q.money_musd || []).map(moneyLabel).join(", ")) +
+        dl("Acres", (q.acres || []).map(fmt).join(", ")) +
+        dl("Years cited", (q.years || []).join(", ")) +
+        dl("Capacity signals", (ev.capacity_signals || []).join(", ")) +
+        dl("Commercial signals", (ev.commercial_signals || []).join(", ")) +
+        dl("Power signals", (ev.power_signals || []).join(", ")) +
+        dl("Power entities", (ev.power_entities || []).join(", ")) +
+        dl("Capital", (ev.capital || []).join(", ")) +
+        dl("Also reported by", (ev.also_in || []).join(", ")) +
+        dl("Source", srcLink(ev.url, ev.source + " — open article")) +
+        "</div></td>";
+    }
+
+    function renderTable(filtered) {
+      el("dash-empty").hidden = filtered.length > 0;
+      el("dash-tbody").innerHTML = filtered.map(function (ev) {
+        var money = moneyOf(ev);
+        var isNew = firstSeen(ev) === latestRun;
+        var partyChips = parties(ev).map(function (p) {
+          return '<span class="chip chip-click" data-party="' + esc(p) + '" title="Filter to ' + esc(p) + '">' + esc(p) + "</span>";
+        }).join("");
+        var metroChips = (ev.metros || []).map(function (m) {
+          return '<span class="chip chip-metro chip-click" data-metro="' + esc(m) + '" title="Filter to ' + esc(m) + '">' + esc(m) + "</span>";
+        }).join("");
+        var rows =
+          '<tr class="ev-row" data-id="' + esc(ev.id) + '">' +
+            '<td class="pin-col"><button type="button" class="pin-btn' + (pins[ev.id] ? " pinned" : "") +
+              '" data-pin="' + esc(ev.id) + '" title="' + (pins[ev.id] ? "Unpin" : "Pin to watchlist") + '">★</button></td>' +
+            "<td>" + esc(ev.date || "—") + (isNew ? ' <span class="new-flag">NEW</span>' : "") + "</td>" +
+            '<td><span class="pill pill-' + typeColor(ev.event_type) + '">' + esc(typeLabel(ev.event_type)) + "</span></td>" +
+            "<td>" + srcLink(ev.url, ev.title) + "</td>" +
+            "<td>" + (partyChips || "—") + "</td>" +
+            "<td>" + (metroChips || "—") + "</td>" +
+            '<td class="num">' + mwCell(ev) + "</td>" +
+            '<td class="num">' + moneyLabel(money) + "</td>" +
+            "<td>" + (signalBadges(ev) || "—") + "</td>" +
+            "<td>" + esc(ev.source) + "</td>" +
+            '<td class="num">' + esc(ev.score) + "</td>" +
+          "</tr>";
+        if (expanded[ev.id]) rows += '<tr class="det-row">' + detailRow(ev) + "</tr>";
+        return rows;
+      }).join("");
+    }
+
+    el("dash-tbody").addEventListener("click", function (e) {
+      var t = e.target;
+      if (t.closest && t.closest("a")) return; // let links be links
+      var pin = t.closest ? t.closest(".pin-btn") : null;
+      if (pin) {
+        var id = pin.dataset.pin;
+        if (pins[id]) delete pins[id]; else pins[id] = 1;
+        savePins(pins);
+        rerender();
+        return;
+      }
+      var chip = t.closest ? t.closest(".chip-click") : null;
+      if (chip) {
+        if (chip.dataset.party) setFilter("party", chip.dataset.party);
+        else if (chip.dataset.metro) setFilter("metro", chip.dataset.metro);
+        return;
+      }
+      var row = t.closest ? t.closest(".ev-row") : null;
+      if (row) {
+        expanded[row.dataset.id] = !expanded[row.dataset.id];
+        rerender();
+      }
+    });
+
+    /* --- CSV export -------------------------------------------------------------- */
+    function exportCSV() {
+      var filtered = sortList(events.filter(matches));
+      var cols = ["date", "event_type", "title", "url", "parties", "metros", "power_entities",
+                  "mw_campus_max", "mw_basis", "mw_aggregate_max", "money_musd_max",
+                  "commercial_signals", "capacity_signals", "power_signals",
+                  "source", "also_in", "score", "first_seen", "last_seen"];
+      function cell(v) {
+        var s = String(v == null ? "" : v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }
+      var lines = [cols.join(",")];
+      filtered.forEach(function (ev) {
+        lines.push([
+          ev.date, ev.event_type, ev.title, ev.url,
+          parties(ev).join("; "), (ev.metros || []).join("; "), (ev.power_entities || []).join("; "),
+          mwOf(ev) || "", ev.mw_basis || "", aggMwOf(ev) || "", moneyOf(ev) || "",
+          (ev.commercial_signals || []).join("; "), (ev.capacity_signals || []).join("; "),
+          (ev.power_signals || []).join("; "),
+          ev.source, (ev.also_in || []).join("; "), ev.score, firstSeen(ev), ev.last_seen || ""
+        ].map(cell).join(","));
+      });
+      var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "dc-market-events-" + latestRun + ".csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    }
+
+    /* --- sortable column headers -------------------------------------------------- */
+    [].slice.call(document.querySelectorAll("#dash-table th[data-sort]")).forEach(function (th) {
+      th.classList.add("sortable");
+      th.addEventListener("click", function () {
+        var key = th.dataset.sort;
+        if (state.sort === key) { state.dir = state.dir === "asc" ? "desc" : "asc"; }
+        else { state.sort = key; state.dir = "desc"; }
+        syncControls();
+        rerender();
+      });
+    });
+  }
+
+  /* --- view switcher (Dashboard <-> Research) -------------------------------- */
+  function initViewSwitcher() {
+    var btns = [].slice.call(document.querySelectorAll(".view-btn"));
+    var researchTabIds = ["fundamentals", "power", "capital", "counterparty", "equities"];
+    function select(view) {
+      btns.forEach(function (b) {
+        var on = b.dataset.view === view;
+        b.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      el("view-dashboard").hidden = view !== "dashboard";
+      el("view-research").hidden = view !== "research";
+      if (history.replaceState) history.replaceState(null, "", view === "research" ? "#research" : "#");
+    }
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () { select(b.dataset.view); });
+    });
+    var rawHash = typeof window.__initialHash === "string" ? window.__initialHash : location.hash;
+    var hash = (rawHash || "").replace("#", "");
+    select(researchTabIds.indexOf(hash) >= 0 || hash === "research" ? "research" : "dashboard");
+  }
+  initViewSwitcher();
+})();

@@ -21,20 +21,60 @@ SOURCES = [
     {"name": "Data Center Frontier", "short": "DCF",
      "url": "https://www.datacenterfrontier.com/rss",
      "fallback": "https://www.datacenterfrontier.com/"},
-    {"name": "Data Center Planet", "short": "DCP",
-     "url": "https://datacenterplanet.com/feed/",
-     "fallback": "https://datacenterplanet.com/"},
     {"name": "Utility Dive", "short": "UD",
      "url": "https://www.utilitydive.com/feeds/news/",
      "fallback": "https://www.utilitydive.com/"},
+    {"name": "Data Center Knowledge", "short": "DCK",
+     "url": "https://www.datacenterknowledge.com/rss.xml",
+     "fallback": "https://www.datacenterknowledge.com/"},
+    {"name": "Data Center Post", "short": "DCPost",
+     "url": "https://datacenterpost.com/feed/",
+     "fallback": "https://datacenterpost.com/"},
+    {"name": "SemiAnalysis", "short": "SA",
+     "url": "https://www.semianalysis.com/feed",
+     "fallback": "https://www.semianalysis.com/"},
+    {"name": "POWER Magazine", "short": "PWR",
+     "url": "https://www.powermag.com/feed/",
+     "fallback": "https://www.powermag.com/"},
+    {"name": "Capacity Media", "short": "CAP",
+     "url": "https://www.capacitymedia.com/rss",
+     "fallback": "https://www.capacitymedia.com/"},
+    {"name": "Latitude Media", "short": "LM",
+     "url": "https://www.latitudemedia.com/feed",
+     "fallback": "https://www.latitudemedia.com/"},
+
+    # Primary-source capital markets. SEC EDGAR company filing feeds for the
+    # two pure-play public data-center REITs. `implied_party` is force-tagged
+    # onto every item from this source — the filing index text never restates
+    # the company name (the feed is already scoped by CIK), so ordinary
+    # keyword matching would never resolve a counterparty on its own.
+    {"name": "SEC EDGAR — Digital Realty (DLR) 8-K", "short": "SEC-DLR",
+     "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001297996&type=8-K&dateb=&owner=include&count=40&output=atom",
+     "implied_party": "Digital Realty"},
+    {"name": "SEC EDGAR — Equinix (EQIX) 8-K", "short": "SEC-EQIX",
+     "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001101239&type=8-K&dateb=&owner=include&count=40&output=atom",
+     "implied_party": "Equinix"},
 ]
 
-# Manual-only. Licensed / compiled-database sources. NEVER automate against
-# these — cite and link by hand.
+# SEC filings cite 8-K Item numbers instead of prose ("Item 2.03: Creation of
+# a Direct Financial Obligation"). The collector appends the mapped phrase to
+# an SEC item's working text so the *existing* EVENT_RULES keywords above
+# resolve it — no separate classification path needed.
+SEC_ITEM_HINTS = {
+    "item 1.01": "master lease",
+    "item 2.01": "acquisition of",
+    "item 2.03": "term loan",
+    "item 3.02": "private placement",
+}
+
+# Manual-only. Licensed / compiled-database sources, or sites with no RSS/
+# syndication at all. NEVER automate against these — cite and link by hand.
 MANUAL_SOURCES = [
     {"name": "DC Byte", "why": "Subscription market intelligence. The compiled dataset is the product."},
     {"name": "Baxtel", "why": "Compiled facility database. Bulk extraction is against terms; check for an API."},
     {"name": "CBRE / JLL / Cushman", "why": "Free summary reports may be cited; subscription products may not."},
+    {"name": "Data Center Planet", "why": "Client-rendered facility directory, not a news source — no RSS/Atom "
+     "feed exists anywhere on the site (confirmed 2026-08). Same category as Baxtel: browse and cite by hand."},
 ]
 
 # ---------------------------------------------------------------------------
@@ -94,7 +134,7 @@ OPERATORS = {
 POWER_ENTITIES = {
     "ERCOT": ["ercot"], "PJM": ["pjm"], "MISO": ["miso"], "SPP": ["spp"],
     "CAISO": ["caiso"], "NYISO": ["nyiso"], "ISO-NE": ["iso-ne", "iso new england"],
-    "Oncor": ["oncor"], "AEP": ["american electric power", "aep"],
+    "Oncor": ["oncor"], "AEP": ["american electric power", "aep"], "PPL": ["ppl electric", "ppl corporation", "ppl"],
     "Dominion": ["dominion energy", "dominion"], "Georgia Power": ["georgia power"],
     "Entergy": ["entergy"], "Duke": ["duke energy"], "Xcel": ["xcel energy"],
     "TVA": ["tennessee valley authority", "tva"], "PUCT": ["puct", "public utility commission of texas"],
