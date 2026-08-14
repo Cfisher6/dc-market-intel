@@ -112,6 +112,7 @@ def fetch_sources(days):
                 "source": src["short"],
                 "source_full": src["name"],
                 "implied_party": src.get("implied_party"),
+                "source_tier": src.get("tier", "trade_press"),
             })
             n += 1
         report.append({"source": src["name"], "ok": True, "count": n, "note": note, "url": url})
@@ -260,6 +261,31 @@ def classify_event(text):
 def is_noise(text):
     return any(has_term(text, n) for n in O.NOISE)
 
+def opposition_status(text, event_type):
+    """Sub-status for DELAY_REPORTED only — see ontology.OPPOSITION_STATUS for
+    why the ordering matters. Returns None when nothing resolves."""
+    if event_type != "DELAY_REPORTED":
+        return None
+    for status, terms in O.OPPOSITION_STATUS:
+        if any(has_term(text, t) for t in terms):
+            return status
+    return None
+
+def confidence_of(text, source_tier):
+    """Primary sources are never downgraded — a filing is a filing. Trade
+    press drops to unconfirmed when the language hedges."""
+    if source_tier == "primary":
+        return "primary"
+    if any(has_term(text, t) for t in O.RUMOR_TERMS):
+        return "unconfirmed"
+    return "trade_press"
+
+def rscore(ev):
+    """Relevance accessor tolerant of pre-migration records, which carry the
+    old flat `score` field until backfill_schema.py has run over them."""
+    v = ev.get("relevance_score")
+    return v if v is not None else ev.get("score", 0)
+
 def sec_item_hints(text):
     """SEC filings cite Item numbers, not prose. Translate the codes present
     into phrases the existing EVENT_RULES keywords already recognize."""
@@ -367,15 +393,17 @@ def build_events(items, deep=False):
             if key and implied not in ev[key]:
                 ev[key] = sorted(ev[key] + [implied])
         ev["topics"] = topics_for(text, ev)
-        ev["score"] = score(ev)
+        ev["opposition_status"] = opposition_status(text, ev["event_type"])
+        ev["confidence_tier"] = confidence_of(text, it.get("source_tier", "trade_press"))
+        ev["relevance_score"] = score(ev)
         events.append(ev)
         texts[ev["id"]] = text
 
     if deep:
         deep_scan(events, texts)
 
-    events.sort(key=lambda e: (-e["score"], e["date"]), reverse=False)
-    events.sort(key=lambda e: e["score"], reverse=True)
+    events.sort(key=lambda e: (-rscore(e), e["date"]), reverse=False)
+    events.sort(key=rscore, reverse=True)
     return events
 
 
@@ -386,7 +414,7 @@ def deep_scan(events, texts):
     from nav bars and 'related stories' modules."""
     candidates = [ev for ev in events if
                   ev["hyperscalers"] or ev["neoclouds"] or
-                  ev["event_type"] in DEEP_TYPES or ev["score"] >= 6]
+                  ev["event_type"] in DEEP_TYPES or rscore(ev) >= 6]
     fetched = enriched = 0
     for ev in candidates:
         if fetched >= DEEP_CAP:
@@ -416,8 +444,13 @@ def deep_scan(events, texts):
             if et != "OTHER":
                 ev["event_type"] = et
         ev["topics"] = topics_for(full, ev)
+        ev["opposition_status"] = opposition_status(full, ev["event_type"])
+        # confidence_tier is deliberately NOT recomputed here. It is derived
+        # from headline + summary; full bodies routinely contain hedging
+        # boilerplate ("sources say", "in talks") describing background rather
+        # than the reported fact, which would downgrade solid stories.
         ev["deep_scan"] = True
-        ev["score"] = score(ev)
+        ev["relevance_score"] = score(ev)
         enriched += 1
     print(f"  deep-scan: {fetched} article(s) fetched, {enriched} enriched")
 
@@ -442,6 +475,10 @@ def mw_tally(events):
 
 def write_feed(events, report, days):
     payload = {
+        # 2 = relevance_score/confidence_tier split, opposition_status.
+        # Readers should tolerate schema 1 records (flat `score`, no tier)
+        # until backfill_schema.py has been run over the store.
+        "schema": 2,
         "generated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "window_days": days,
         "sources": report,
@@ -484,7 +521,7 @@ def write_digest(events, report, days):
     if bad:
         lines.append("> **Feed problems:** " + "; ".join(f"{r['source']} — {r['note']}" for r in bad) + "\n")
 
-    top = [e for e in events if e["score"] >= 6][:40]
+    top = [e for e in events if rscore(e) >= 6][:40]
     lines.append(f"\n## Ranked events ({len(top)} of {len(events)} above threshold, {days}-day window)\n")
     for e in top:
         parties = e["hyperscalers"] + e["neoclouds"] + e["operators"]
@@ -499,9 +536,11 @@ def write_digest(events, report, days):
         if e["metros"]: bits.append("/".join(e["metros"]))
         if "guarantee" in e["commercial_signals"]: bits.append("**GUARANTEE LANGUAGE**")
         if "prelease" in e["commercial_signals"]: bits.append("prelease")
+        if e.get("opposition_status"): bits.append(e["opposition_status"].replace("_", " "))
+        tier = e.get("confidence_tier", "trade_press")
         lines.append(
-            f"\n### [{e['score']}] {e['event_type']} — {e['title']}\n"
-            f"- {e['source']} · {e['date']} · <{e['url']}>\n"
+            f"\n### [{rscore(e)}] {e['event_type']} — {e['title']}\n"
+            f"- {e['source']} · {e['date']} · confidence: {tier} · <{e['url']}>\n"
             f"- Parties: {', '.join(parties) if parties else '—'}\n"
             f"- Signals: {', '.join(bits) if bits else '—'}\n"
             f"- Power: {', '.join(e['power_entities'] + e['power_signals']) or '—'}\n"
@@ -545,8 +584,8 @@ def main():
     else:
         run_ts = dt.datetime.now(dt.timezone.utc).date().isoformat()
         all_events = merge_events(existing, new_events, run_ts)
-        all_events.sort(key=lambda e: (-e["score"], e["date"]), reverse=False)
-        all_events.sort(key=lambda e: e["score"], reverse=True)
+        all_events.sort(key=lambda e: (-rscore(e), e["date"]), reverse=False)
+        all_events.sort(key=rscore, reverse=True)
 
     n = write_feed(all_events, report, a.days)
     write_digest(new_events, report, a.days)
