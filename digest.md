@@ -11,14 +11,12 @@ What the rules cannot do, and you must:
 - Read whether a guarantee sits at parent or opco
 - Judge whether an announced project is financeable or a press release
 
-Sources checked: Data Center Dynamics (20), Data Center Frontier (17), Utility Dive (10), Data Center Knowledge (50), Data Center Post (38), SemiAnalysis (0), POWER Magazine (10), Capacity Media (10), Latitude Media (10), The Register — On-Prem (11), W.Media (10), DataCenterNews Asia (10), SEC EDGAR — Digital Realty (DLR) 8-K FAILED, SEC EDGAR — Equinix (EQIX) 8-K FAILED
+Sources checked: Data Center Dynamics (20), Data Center Frontier (25), Utility Dive (10), Data Center Knowledge (50), Data Center Post (100), SemiAnalysis (0), POWER Magazine (10), Capacity Media (10), Latitude Media (10), The Register — On-Prem (37), W.Media (10), DataCenterNews Asia (10), SEC EDGAR — Digital Realty (DLR) 8-K (5), SEC EDGAR — Equinix (EQIX) 8-K (4), SEC EDGAR — CoreWeave (CRWV) periodic (1)
 
 ---
 
-> **Feed problems:** SEC EDGAR — Digital Realty (DLR) 8-K — no entries — check feed URL in ontology.py SOURCES; SEC EDGAR — Equinix (EQIX) 8-K — no entries — check feed URL in ontology.py SOURCES
 
-
-## Ranked events (29 of 187 above threshold, 30-day window)
+## Ranked events (32 of 290 above threshold, 90-day window)
 
 
 ### [15.0] LEASE_SIGNED — TeraWulf’s $19B Anthropic Lease Puts Its Brownfield AI Strategy to the Test
@@ -187,6 +185,27 @@ Sources checked: Data Center Dynamics (20), Data Center Frontier (17), Utility D
 - Parties: —
 - Signals: 49,800 MW aggregate/queue, $15.0B
 - Power: ERCOT
+
+
+### [6.0] EXPANSION_EXERCISED — Structure Research Forecasts AI Data Center Capacity Will Reach 150 GW by 203
+- DCPost · 2026-06-30 · confidence: trade_press · <https://datacenterpost.com/structure-research-forecasts-ai-data-center-capacity-will-reach-150-gw-by-203/?utm_source=rss&utm_medium=rss&utm_campaign=structure-research-forecasts-ai-data-center-capacity-will-reach-150-gw-by-203>
+- Parties: —
+- Signals: 2,300 MW (unstated), 150,000 MW aggregate/queue
+- Power: —
+
+
+### [6.0] EXPANSION_EXERCISED — Duos Edge AI Signs Agreement for an Additional 2 MW Deployment
+- DCPost · 2026-07-08 · confidence: trade_press · <https://datacenterpost.com/duos-edge-ai-signs-agreement-for-an-additional-2-mw-deployment/?utm_source=rss&utm_medium=rss&utm_campaign=duos-edge-ai-signs-agreement-for-an-additional-2-mw-deployment>
+- Parties: —
+- Signals: 10 MW (IT)
+- Power: —
+
+
+### [6.0] FINANCING_CLOSED — Speed-to-Deploy: How Modular Data Centers Cut Deployment Timelines by Up to 50%
+- DCPost · 2026-07-14 · confidence: trade_press · <https://datacenterpost.com/speed-to-deploy-how-modular-data-centers-cut-deployment-timelines-by-up-to-50/?utm_source=rss&utm_medium=rss&utm_campaign=speed-to-deploy-how-modular-data-centers-cut-deployment-timelines-by-up-to-50>
+- Parties: —
+- Signals: 10 MW (unstated)
+- Power: —
 
 
 ### [6.0] INTERCONNECT_FILED — Galaxy’s 500-Acre Texas AI Campus Reflects New Grid Model

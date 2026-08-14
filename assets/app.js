@@ -140,6 +140,41 @@
   function renderCapital() {
     var c = D.capital, h = "";
     h += '<h2 class="sec">What is publicly visible</h2>' + metricGrid(c.headline);
+
+    // Rating-agency ABS/CMBS — the only public window into private operators'
+    // lease books. Hand-entered; see the schema comment in market-data.js.
+    var deals = c.abs_deals || [];
+    h += '<h2 class="sec">Rated data-center ABS / CMBS</h2>';
+    if (!deals.length) {
+      h += '<div class="gapbox"><h3>No rated deals recorded yet</h3>' +
+        "<p style='margin-top:0'>Presale and surveillance reports from KBRA, Moody's, DBRS and Fitch " +
+        "disclose tenant names, weighted-average remaining lease term and tenant credit quality for " +
+        "operators that file nothing with the SEC. Add entries by hand in <code>data/market-data.js</code> " +
+        "(<code>capital.abs_deals</code>) — the field schema and the rules are documented there. " +
+        "Every record needs a live public link.</p></div>";
+    } else {
+      h += "<table><caption>Hand-entered from public rating-agency reports. " +
+        "<strong>Agencies do not compute these alike</strong> — WALT may or may not include extension " +
+        "options, and credit measures may be by NRSF, base rent, or MW. Filter by agency before " +
+        "comparing; never average across agencies.</caption>" +
+        "<thead><tr><th>Deal</th><th>Sponsor</th><th>Agency</th><th class='num'>Size</th>" +
+        "<th class='num'>WALT</th><th>Tenants</th><th>Credit</th></tr></thead><tbody>";
+      deals.forEach(function (d) {
+        h += "<tr><td><strong>" + esc(d.deal) + "</strong>" +
+            (d.report_type ? "<span class='sub'>" + esc(d.report_type) + " · " + esc(d.as_of || "") + "</span>" : "") +
+            "</td>" +
+          "<td>" + esc(d.sponsor || "—") + "</td>" +
+          '<td><span class="pill agency">' + esc(d.agency || "—") + "</span></td>" +
+          "<td class='num'>" + (d.size_musd == null ? "—" :
+            (d.size_musd >= 1000 ? "$" + (d.size_musd / 1000).toFixed(1) + "B" : "$" + fmt(d.size_musd) + "M")) + "</td>" +
+          "<td class='num'>" + (d.walt_years == null ? "—" : esc(d.walt_years) + "y") +
+            (d.walt_basis ? "<span class='sub'>" + esc(d.walt_basis) + "</span>" : "") + "</td>" +
+          "<td>" + (d.tenants && d.tenants.length ? esc(d.tenants.join(", ")) : "—") + "</td>" +
+          "<td>" + esc(d.credit_note || "—") + srcLink(d.agency + " report", d.url) + "</td></tr>";
+      });
+      h += "</tbody></table>";
+    }
+
     h += '<h2 class="sec">Known gaps</h2><div class="gapbox"><h3>Not obtainable from public sources</h3><ul>' +
       c.gaps.map(function (g) { return "<li>" + esc(g) + "</li>"; }).join("") +
       "</ul><p>" + esc(c.note) + "</p></div>";
