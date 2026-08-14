@@ -266,6 +266,38 @@ def sec_item_hints(text):
     low = text.lower()
     return " ".join(hint for code, hint in O.SEC_ITEM_HINTS.items() if code in low)
 
+def topics_for(text, ev):
+    """Multi-label topics: term rules plus three derived flags."""
+    out = {t for t, terms in O.TOPIC_RULES.items() if any(has_term(text, term) for term in terms)}
+    if ev["hyperscalers"]:
+        out.add("Hyperscale")
+    if ev["neoclouds"]:
+        out.add("Neocloud & AI Compute")
+    if any(m in O.INTL_METROS for m in ev["metros"]):
+        out.add("International")
+    return sorted(out)
+
+RE_SCRIPT_STYLE = re.compile(r"<script\b.*?</script>|<style\b.*?</style>", re.S | re.I)
+RE_ARTICLE = re.compile(r"<article[^>]*>(.*?)</article>", re.S | re.I)
+
+def fetch_article_text(url):
+    """Fetch one article for in-memory signal detection. Returns (text, scoped)
+    where scoped=True means the text came from an <article> element rather than
+    the whole page. NEVER persisted — derived signals only, per the README."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": FEED_UA})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = r.read(600_000).decode("utf-8", "ignore")
+    except Exception:
+        return None, False
+    body = RE_SCRIPT_STYLE.sub(" ", body)
+    m = RE_ARTICLE.search(body)
+    chunk, scoped = (m.group(1), True) if m else (body, False)
+    text = re.sub(r"<[^>]+>", " ", chunk)
+    text = re.sub(r"\s+", " ", html.unescape(text))
+    return text[:20000], scoped
+
 def party_category(name):
     for d in (O.HYPERSCALERS, O.NEOCLOUDS, O.OPERATORS, O.CAPITAL):
         if name in d:
@@ -295,8 +327,11 @@ def score(ev):
 # build
 # ---------------------------------------------------------------------------
 
-def build_events(items):
-    events = []
+DEEP_TYPES = ("LEASE_SIGNED", "TENANT_DISCLOSED", "FINANCING_CLOSED", "PLATFORM_M&A")
+DEEP_CAP = 40  # articles fetched per run — keep the weekly Action fast and polite
+
+def build_events(items, deep=False):
+    events, texts = [], {}
     for it in items:
         text = it["title"] + " " + it["summary"]
         if is_noise(text):
@@ -331,11 +366,60 @@ def build_events(items):
                    "capital" if d is O.CAPITAL else None)
             if key and implied not in ev[key]:
                 ev[key] = sorted(ev[key] + [implied])
+        ev["topics"] = topics_for(text, ev)
         ev["score"] = score(ev)
         events.append(ev)
+        texts[ev["id"]] = text
+
+    if deep:
+        deep_scan(events, texts)
+
     events.sort(key=lambda e: (-e["score"], e["date"]), reverse=False)
     events.sort(key=lambda e: e["score"], reverse=True)
     return events
+
+
+def deep_scan(events, texts):
+    """Fetch article bodies (in memory only) for the highest-value events and
+    re-run signal extraction over the full text. Only <article>-scoped
+    extractions are used — whole-page fallbacks would tag entities and metros
+    from nav bars and 'related stories' modules."""
+    candidates = [ev for ev in events if
+                  ev["hyperscalers"] or ev["neoclouds"] or
+                  ev["event_type"] in DEEP_TYPES or ev["score"] >= 6]
+    fetched = enriched = 0
+    for ev in candidates:
+        if fetched >= DEEP_CAP:
+            break
+        if fetched:
+            time.sleep(0.5)
+        body, scoped = fetch_article_text(ev["url"])
+        fetched += 1
+        if not body or not scoped:
+            continue
+        full = texts[ev["id"]] + " " + body
+        ev["quantities"] = extract_quantities(full)
+        ev["mw_basis"] = mw_basis(full)
+        ev["hyperscalers"] = match_dict(full, O.HYPERSCALERS)
+        ev["neoclouds"] = match_dict(full, O.NEOCLOUDS)
+        ev["operators"] = match_dict(full, O.OPERATORS)
+        ev["power_entities"] = match_dict(full, O.POWER_ENTITIES)
+        ev["capital"] = match_dict(full, O.CAPITAL)
+        ev["metros"] = match_dict(full, O.METROS)
+        ev["capacity_signals"] = match_signals(full, O.CAPACITY_SIGNALS)
+        ev["commercial_signals"] = match_signals(full, O.COMMERCIAL_SIGNALS)
+        ev["power_signals"] = match_signals(full, O.POWER_SIGNALS)
+        # Only upgrade a vague type — never overwrite a specific one with a
+        # body-text match, the headline is the better statement of the event.
+        if ev["event_type"] in ("OTHER", "CAPACITY_ANNOUNCED"):
+            et = classify_event(full)
+            if et != "OTHER":
+                ev["event_type"] = et
+        ev["topics"] = topics_for(full, ev)
+        ev["deep_scan"] = True
+        ev["score"] = score(ev)
+        enriched += 1
+    print(f"  deep-scan: {fetched} article(s) fetched, {enriched} enriched")
 
 def mw_tally(events):
     """Announced MW by counterparty. Announced, not verified — dedupe by hand."""
@@ -443,6 +527,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--no-network", action="store_true", help="write empty scaffolding")
+    ap.add_argument("--no-deep", action="store_true",
+                    help="skip fetching article bodies for signal enrichment")
     a = ap.parse_args()
 
     if a.no_network:
@@ -450,7 +536,7 @@ def main():
     else:
         items, report = fetch_sources(a.days)
 
-    new_events = build_events(dedupe(items))
+    new_events = build_events(dedupe(items), deep=not a.no_deep and not a.no_network)
     existing = load_existing_events()
 
     if a.no_network:

@@ -71,7 +71,44 @@
     "Richmond": [37.54, -77.44],
     "Memphis": [35.15, -90.05],
     "Louisiana": [32.35, -91.75],
-    "Wisconsin": [42.72, -87.85]
+    "Wisconsin": [42.72, -87.85],
+    "Pennsylvania": [40.9, -77.8],
+    "Indiana": [40.3, -86.1],
+    "Iowa": [42.0, -93.5],
+    "Nevada": [38.8, -116.4],
+    "North Carolina": [35.5, -79.4],
+    "South Carolina": [33.9, -80.9],
+    "Oklahoma": [35.5, -97.5],
+    "Alabama": [32.8, -86.8],
+    "Mississippi": [32.7, -89.7],
+    "Idaho": [43.6, -116.2],
+    "Wyoming": [41.14, -104.82],
+    "Kansas City": [39.1, -94.58],
+    "Michigan": [42.3, -83.7],
+    "Minnesota": [44.8, -93.1],
+    "Canada": [43.65, -79.38],
+    "Mexico": [20.59, -100.39],
+    "UK": [51.5, -0.12],
+    "Ireland": [53.35, -6.26],
+    "Spain": [40.42, -3.70],
+    "Germany": [50.11, 8.68],
+    "France": [48.86, 2.35],
+    "Netherlands": [52.37, 4.90],
+    "Italy": [45.46, 9.19],
+    "Portugal": [38.7, -9.1],
+    "Nordics": [59.33, 18.07],
+    "India": [19.08, 72.88],
+    "Japan": [35.68, 139.69],
+    "South Korea": [37.57, 126.98],
+    "Singapore": [1.35, 103.82],
+    "Malaysia": [1.49, 103.74],
+    "Indonesia": [-6.2, 106.85],
+    "Australia": [-33.87, 151.21],
+    "Middle East": [24.47, 54.37],
+    "Brazil": [-23.55, -46.63],
+    "Chile": [-33.45, -70.67],
+    "Africa": [-26.20, 28.05],
+    "China": [31.23, 121.47]
   };
 
   /* Lifecycle stages for the pipeline board, built from the event types the
@@ -139,7 +176,7 @@
     var pins = loadPins();
     var expanded = {}; // event id -> bool
 
-    var DEFAULTS = { type: "", party: "", metro: "", power: "", mwMin: 0, moneyMin: 0, scoreMin: 0,
+    var DEFAULTS = { type: "", topic: "", party: "", metro: "", power: "", mwMin: 0, moneyMin: 0, scoreMin: 0,
                      from: "", to: "", q: "", newOnly: false, pinnedOnly: false, sort: "score", dir: "desc" };
     var state = readStateFromURL();
 
@@ -162,11 +199,12 @@
 
     /* --- filter option lists ----------------------------------------------- */
     var allTypes = uniqueSorted(events.map(function (e) { return e.event_type; }));
+    var allTopics = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.topics || []); }, []));
     var allParties = uniqueSorted(events.reduce(function (a, e) { return a.concat(parties(e)); }, []));
     var allMetros = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.metros || []); }, []));
     var allPower = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.power_entities || []); }, []));
 
-    renderFilters(allTypes, allParties, allMetros, allPower);
+    renderFilters(allTypes, allTopics, allParties, allMetros, allPower);
     renderToolbar();
     syncControls();
     rerender();
@@ -178,6 +216,7 @@
     }
     function matches(ev) {
       if (state.type && ev.event_type !== state.type) return false;
+      if (state.topic && (ev.topics || []).indexOf(state.topic) === -1) return false;
       if (state.party && parties(ev).indexOf(state.party) === -1) return false;
       if (state.metro && (ev.metros || []).indexOf(state.metro) === -1) return false;
       if (state.power && (ev.power_entities || []).indexOf(state.power) === -1) return false;
@@ -231,6 +270,7 @@
       try {
         var p = new URLSearchParams(location.search);
         if (p.get("type")) s.type = p.get("type");
+        if (p.get("topic")) s.topic = p.get("topic");
         if (p.get("party")) s.party = p.get("party");
         if (p.get("metro")) s.metro = p.get("metro");
         if (p.get("power")) s.power = p.get("power");
@@ -251,6 +291,7 @@
       var p = [];
       function add(k, v) { p.push(k + "=" + encodeURIComponent(v)); }
       if (state.type) add("type", state.type);
+      if (state.topic) add("topic", state.topic);
       if (state.party) add("party", state.party);
       if (state.metro) add("metro", state.metro);
       if (state.power) add("power", state.power);
@@ -267,13 +308,14 @@
     }
 
     /* --- filter bar --------------------------------------------------------- */
-    function renderFilters(types, partiesList, metros, powerEntities) {
+    function renderFilters(types, topics, partiesList, metros, powerEntities) {
       function opts(list, allLabel, labelFn) {
         return '<option value="">' + allLabel + "</option>" + list.map(function (v) {
           return '<option value="' + esc(v) + '">' + esc(labelFn ? labelFn(v) : v) + "</option>";
         }).join("");
       }
       el("dash-filters").innerHTML =
+        '<select id="f-topic" aria-label="Topic">' + opts(topics, "All topics") + "</select>" +
         '<select id="f-type" aria-label="Event type">' + opts(types, "All types", typeLabel) + "</select>" +
         '<select id="f-party" aria-label="Customer / party">' + opts(partiesList, "All parties") + "</select>" +
         '<select id="f-metro" aria-label="Location">' + opts(metros, "All locations") + "</select>" +
@@ -305,6 +347,7 @@
           rerender();
         });
       }
+      bind("f-topic", "topic");
       bind("f-type", "type");
       bind("f-party", "party");
       bind("f-metro", "metro");
@@ -354,6 +397,7 @@
     }
 
     function syncControls() {
+      el("f-topic").value = state.topic;
       el("f-type").value = state.type;
       el("f-party").value = state.party;
       el("f-metro").value = state.metro;
@@ -458,7 +502,7 @@
     /* --- activity map (metro-level, click a bubble to filter) ------------------ */
     // Declaration only — no initializer. The first rerender() runs before this
     // line, and `var x = null` here would clobber the map it already created.
-    var mapObj, mapLayer;
+    var mapObj, mapLayer, mapFitted;
     function renderMap(filtered) {
       var box = el("dash-map");
       if (!box) return;
@@ -501,6 +545,13 @@
         c.on("click", function () { setFilter("metro", m); });
         c.addTo(mapLayer);
       });
+      // Fit once, on the first render with data — after that the viewport is
+      // the user's to control; refitting on every filter click is disorienting.
+      if (!mapFitted) {
+        var pts = Object.keys(byMetro).map(function (m) { return METRO_COORDS[m]; });
+        if (pts.length > 1) { mapObj.fitBounds(pts, { padding: [30, 30], maxZoom: 5 }); mapFitted = true; }
+        else if (pts.length === 1) { mapObj.setView(pts[0], 5); mapFitted = true; }
+      }
       el("map-note").textContent =
         "Metro-level activity from location tags — not facility coordinates. " +
         (untagged ? fmt(untagged) + " of " + fmt(filtered.length) + " filtered events carry no tagged metro (international or untagged). " : "") +
@@ -634,6 +685,8 @@
     }
 
     function renderBreakdowns(filtered) {
+      var byTopic = tally(filtered, function (e) { return e.topics; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
       var byType = tally(filtered, function (e) { return [e.event_type]; })
         .map(function (p) { return [typeLabel(p[0]), p[1], p[0]]; });
       var byMetro = tally(filtered, function (e) { return e.metros; })
@@ -643,6 +696,7 @@
       var byMW = mwByParty(filtered).map(function (p) { return [p[0], p[1], p[0]]; });
 
       el("dash-breakdowns").innerHTML = '<div class="bd-grid">' +
+        breakdownCard("Events by topic", byTopic.length ? barRows(byTopic, "", "topic") : emptyNote()) +
         breakdownCard("Events by type", byType.length ? barRows(byType, "", "type") : emptyNote()) +
         breakdownCard("Events by location", byMetro.length ? barRows(byMetro, "", "metro") : emptyNote()) +
         breakdownCard("MW by counterparty", byMW.length ? barRows(byMW, "MW", "party") : emptyNote()) +
@@ -672,6 +726,7 @@
         chips.push('<button type="button" class="afchip" data-clear="' + esc(key) + '">' + esc(label) + " ✕</button>");
       }
       if (state.type) chip(typeLabel(state.type), "type");
+      if (state.topic) chip(state.topic, "topic");
       if (state.party) chip(state.party, "party");
       if (state.metro) chip(state.metro, "metro");
       if (state.power) chip(state.power, "power");
@@ -781,6 +836,7 @@
         return val ? '<div class="det-item"><span class="metric-label">' + label + "</span> " + val + "</div>" : "";
       }
       return '<td colspan="11"><div class="det-grid">' +
+        dl("Topics", (ev.topics || []).join(", ")) +
         dl("First seen", esc(firstSeen(ev))) +
         dl("Last seen", esc(ev.last_seen || "")) +
         dl("MW figures", (q.mw_campus || []).map(fmt).join(", ")) +
@@ -857,7 +913,7 @@
     /* --- CSV export -------------------------------------------------------------- */
     function exportCSV() {
       var filtered = sortList(events.filter(matches));
-      var cols = ["date", "event_type", "title", "url", "parties", "metros", "power_entities",
+      var cols = ["date", "event_type", "topics", "title", "url", "parties", "metros", "power_entities",
                   "mw_campus_max", "mw_basis", "mw_aggregate_max", "money_musd_max",
                   "commercial_signals", "capacity_signals", "power_signals",
                   "source", "also_in", "score", "first_seen", "last_seen"];
@@ -868,7 +924,7 @@
       var lines = [cols.join(",")];
       filtered.forEach(function (ev) {
         lines.push([
-          ev.date, ev.event_type, ev.title, ev.url,
+          ev.date, ev.event_type, (ev.topics || []).join("; "), ev.title, ev.url,
           parties(ev).join("; "), (ev.metros || []).join("; "), (ev.power_entities || []).join("; "),
           mwOf(ev) || "", ev.mw_basis || "", aggMwOf(ev) || "", moneyOf(ev) || "",
           (ev.commercial_signals || []).join("; "), (ev.capacity_signals || []).join("; "),

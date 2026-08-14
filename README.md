@@ -83,6 +83,21 @@ Run it on demand: Actions tab -> Collect market feeds -> Run workflow.
 Merging means a feed problem (a URL move, a dead RSS endpoint) only affects
 new events going forward — it never deletes what's already in `data/feed.js`.
 
+### Topics and the deep scan
+
+Every event gets multi-label **topics** (`ontology.TOPIC_RULES`) alongside its
+event type — Leasing & Demand, Hyperscale, Neocloud & AI Compute, Power &
+Grid, Financing & M&A, and so on. Three are derived rather than term-matched:
+Hyperscale and Neocloud from entity hits, International from the metro. The
+dashboard filters on them.
+
+The collector also **deep-scans up to 40 high-value events per run** (entity
+match, deal-type events, or score ≥ 6): it fetches the article body in
+memory, re-runs quantity/signal/entity extraction over the full text, and
+upgrades vague event types. Only `<article>`-scoped text is used — whole-page
+fallbacks would tag entities from nav bars and related-story modules. Skip it
+with `--no-deep`.
+
 ### What it never does
 
 Store article body text. Full text is fetched into memory for signal detection

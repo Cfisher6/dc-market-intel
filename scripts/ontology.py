@@ -42,6 +42,15 @@ SOURCES = [
     {"name": "Latitude Media", "short": "LM",
      "url": "https://www.latitudemedia.com/feed",
      "fallback": "https://www.latitudemedia.com/"},
+    {"name": "The Register — On-Prem", "short": "REG",
+     "url": "https://www.theregister.com/on_prem/headlines.atom",
+     "fallback": "https://www.theregister.com/on_prem/"},
+    {"name": "W.Media", "short": "WM",
+     "url": "https://w.media/feed/",
+     "fallback": "https://w.media/"},
+    {"name": "DataCenterNews Asia", "short": "DCNA",
+     "url": "https://datacenternews.asia/feed",
+     "fallback": "https://datacenternews.asia/"},
 
     # Primary-source capital markets. SEC EDGAR company filing feeds for the
     # two pure-play public data-center REITs. `implied_party` is force-tagged
@@ -92,6 +101,10 @@ HYPERSCALERS = {
     "xAI": ["xai", "x.ai"],
     "OpenAI": ["openai", "stargate"],
     "Anthropic": ["anthropic"],
+    # NVIDIA and Tesla lease and build at hyperscale even though neither is a
+    # cloud: NVIDIA as anchor tenant/investor, Tesla for its own AI clusters.
+    "NVIDIA": ["nvidia"],
+    "Tesla": ["tesla", "dojo", "cortex"],
 }
 
 NEOCLOUDS = {
@@ -108,6 +121,15 @@ NEOCLOUDS = {
     "Cipher Mining": ["cipher mining"],
     "TeraWulf": ["terawulf"],
     "Galaxy Digital": ["galaxy digital"],
+    "Core Scientific": ["core scientific"],
+    "Hut 8": ["hut 8"],
+    "Voltage Park": ["voltage park"],
+    "Vultr": ["vultr"],
+    "TensorWave": ["tensorwave"],
+    "Groq": ["groq"],
+    "Cerebras": ["cerebras"],
+    "G42": ["g42"],
+    "Humain": ["humain"],
 }
 
 OPERATORS = {
@@ -129,6 +151,22 @@ OPERATORS = {
     "Novva": ["novva"],
     "TierPoint": ["tierpoint"],
     "Flexential": ["flexential"],
+    "CloudHQ": ["cloudhq"],
+    "T5": ["t5 data centers", "t5dc"],
+    "Sabey": ["sabey"],
+    "Stream": ["stream data centers"],
+    "Tract": ["tract"],
+    "Skybox": ["skybox data", "skybox datacenters"],
+    "Edged": ["edged"],
+    "Cologix": ["cologix"],
+    "Ada Infrastructure": ["ada infrastructure"],
+    "Corscale": ["corscale"],
+    "Global Switch": ["global switch"],
+    "STT GDC": ["stt gdc", "st telemedia"],
+    "AirTrunk": ["airtrunk"],
+    "NEXTDC": ["nextdc"],
+    "Iron Mountain": ["iron mountain"],
+    "DataVolt": ["datavolt"],
 }
 
 POWER_ENTITIES = {
@@ -139,6 +177,11 @@ POWER_ENTITIES = {
     "Entergy": ["entergy"], "Duke": ["duke energy"], "Xcel": ["xcel energy"],
     "TVA": ["tennessee valley authority", "tva"], "PUCT": ["puct", "public utility commission of texas"],
     "FERC": ["ferc"],
+    "NextEra": ["nextera"], "Constellation": ["constellation energy", "constellation"],
+    "Vistra": ["vistra"], "NRG": ["nrg energy", "nrg"], "Talen": ["talen"],
+    "GE Vernova": ["ge vernova"], "Westinghouse": ["westinghouse"],
+    "Bloom Energy": ["bloom energy"], "Southern Company": ["southern company"],
+    "AES": ["aes corporation", "aes corp"],
 }
 
 CAPITAL = {
@@ -147,6 +190,8 @@ CAPITAL = {
     "Blue Owl": ["blue owl"], "Apollo": ["apollo global", "apollo management"],
     "Ares": ["ares management"], "Macquarie": ["macquarie"],
     "Silver Lake": ["silver lake"], "Stonepeak": ["stonepeak"],
+    "BlackRock": ["blackrock"], "MGX": ["mgx"], "SoftBank": ["softbank"],
+    "Partners Group": ["partners group"], "PGIM": ["pgim"],
 }
 
 METROS = {
@@ -167,7 +212,56 @@ METROS = {
     "Richmond": ["richmond virginia", "henrico"],
     "Memphis": ["memphis"],
     "Louisiana": ["louisiana", "richland parish"],
-    "Wisconsin": ["mount pleasant wisconsin", "port washington"],
+    "Wisconsin": ["mount pleasant wisconsin", "port washington", "wisconsin"],
+    "Pennsylvania": ["pennsylvania", "homer city", "berwick", "susquehanna"],
+    "Indiana": ["indiana", "new carlisle"],
+    "Iowa": ["iowa", "cedar rapids", "altoona"],
+    "Nevada": ["reno", "las vegas", "storey county", "nevada"],
+    "North Carolina": ["north carolina"],
+    "South Carolina": ["south carolina"],
+    "Oklahoma": ["oklahoma", "pryor", "stillwater"],
+    "Alabama": ["alabama", "huntsville", "bessemer"],
+    "Mississippi": ["mississippi", "meridian"],
+    "Idaho": ["idaho", "kuna"],
+    "Wyoming": ["wyoming", "cheyenne"],
+    "Kansas City": ["kansas city"],
+    "Michigan": ["michigan", "saline township"],
+    "Minnesota": ["minnesota", "rosemount"],
+    # International — coarse country/region buckets, not metros. Bare "mexico"
+    # is deliberately absent (it would swallow New Mexico), as is bare
+    # "ontario" (Ontario, California is a US submarket).
+    "Canada": ["canada", "alberta", "quebec", "toronto", "montreal", "calgary"],
+    "Mexico": ["queretaro", "querétaro", "monterrey", "mexico city"],
+    "UK": ["united kingdom", "london", "slough", "scotland", "wales"],
+    "Ireland": ["ireland", "dublin"],
+    "Spain": ["spain", "madrid", "aragon", "zaragoza", "barcelona"],
+    "Germany": ["germany", "frankfurt", "berlin"],
+    "France": ["france", "paris", "marseille"],
+    "Netherlands": ["netherlands", "amsterdam"],
+    "Italy": ["italy", "milan"],
+    "Portugal": ["portugal", "sines"],
+    "Nordics": ["norway", "sweden", "finland", "denmark", "iceland", "oslo", "stockholm"],
+    "India": ["india", "mumbai", "chennai", "hyderabad", "pune"],
+    "Japan": ["japan", "tokyo", "osaka"],
+    "South Korea": ["south korea", "seoul"],
+    "Singapore": ["singapore"],
+    "Malaysia": ["malaysia", "johor", "cyberjaya"],
+    "Indonesia": ["indonesia", "jakarta", "batam"],
+    "Australia": ["australia", "sydney", "melbourne"],
+    "Middle East": ["uae", "abu dhabi", "dubai", "saudi", "riyadh", "neom", "qatar"],
+    "Brazil": ["brazil", "sao paulo", "são paulo", "rio de janeiro"],
+    "Chile": ["chile", "santiago"],
+    "Africa": ["south africa", "johannesburg", "nigeria", "lagos", "kenya", "nairobi", "egypt"],
+    "China": ["china", "shanghai", "beijing"],
+}
+
+# Metro keys above that are outside the US — used to derive the
+# "International" topic flag.
+INTL_METROS = {
+    "Canada", "Mexico", "UK", "Ireland", "Spain", "Germany", "France",
+    "Netherlands", "Italy", "Portugal", "Nordics", "India", "Japan",
+    "South Korea", "Singapore", "Malaysia", "Indonesia", "Australia",
+    "Middle East", "Brazil", "Chile", "Africa", "China",
 }
 
 # ---------------------------------------------------------------------------
@@ -176,54 +270,135 @@ METROS = {
 # Order matters — first match wins. Put the specific above the generic.
 
 EVENT_RULES = [
+    # Bare "acquires"/"acquisition of" deliberately absent from M&A — they were
+    # swallowing land acquisitions before SITE_ACQUIRED could see them.
     ("PLATFORM_M&A", [
-        "acquires", "acquisition of", "to acquire", "merger", "take-private",
-        "buys stake", "majority stake", "carve-out", "continuation vehicle",
-    ]),
-    ("FINANCING_CLOSED", [
-        "closes financing", "securitization", "abs", "green bond", "term loan",
-        "construction loan", "raises $", "funding round", "series ", "credit facility",
-        "private placement", "notes offering", "recapitalization",
+        "to acquire", "merger", "take-private", "takeover",
+        "buys stake", "acquires stake", "majority stake", "minority stake",
+        "carve-out", "continuation vehicle", "acquires operator",
+        "platform acquisition", "acquires competitor",
     ]),
     ("LEASE_SIGNED", [
-        "signs lease", "leases", "leasing agreement", "preleased", "pre-leased",
-        "fully leased", "anchor tenant", "take-or-pay", "capacity agreement",
-        "offtake", "master lease", "colocation agreement", "wholesale agreement",
+        "lease", "leasing", "signs lease", "lease with", "lease for", "leases", "leased",
+        "leasing agreement", "lease agreement", "preleased", "pre-leased",
+        "preleases", "pre-leases", "fully leased", "anchor tenant",
+        "take-or-pay", "capacity agreement", "capacity deal", "capacity contract",
+        "capacity commitment", "secures capacity", "offtake", "master lease",
+        "colocation agreement", "colocation deal", "wholesale agreement",
+        "compute agreement", "compute contract", "compute deal", "cloud deal",
+        "gpu agreement", "inks deal", "inks lease", "signs deal with",
+        "multi-year agreement", "agreement to deliver",
     ]),
     ("TENANT_DISCLOSED", [
         "revealed as tenant", "confirmed as tenant", "named as customer",
-        "identified as the tenant", "tenant is",
+        "identified as the tenant", "tenant is", "mystery tenant",
+        "unnamed tenant", "tenant revealed", "anchor customer",
+    ]),
+    ("FINANCING_CLOSED", [
+        "closes financing", "financing", "securitization", "abs", "green bond",
+        "bond sale", "notes offering", "term loan", "construction loan",
+        "debt package", "credit agreement", "credit facility",
+        "raises $", "capital raise", "funding round", "series ", "equity investment",
+        "investment from", "invests $", "private placement", "recapitalization",
+        "data center fund", "infrastructure fund", "ipo",
     ]),
     ("POWER_SECURED", [
-        "power purchase agreement", "ppa", "secures power", "energization",
-        "energized", "behind-the-meter", "behind the meter", "byog",
-        "bring your own generation", "nuclear agreement", "smr agreement",
-        "gas turbines", "on-site generation", "fuel cell",
+        "power purchase agreement", "ppa", "signs ppa", "secures power",
+        "power deal", "power agreement", "power contract", "power supply deal",
+        "energy deal", "electricity deal", "energization", "energized",
+        "behind-the-meter", "behind the meter", "byog",
+        "bring your own generation", "nuclear agreement", "nuclear power",
+        "smr agreement", "smr", "geothermal", "gas turbines", "gas turbine",
+        "on-site generation", "fuel cell",
     ]),
     ("INTERCONNECT_FILED", [
-        "interconnection", "large load", "queue position", "transmission line",
+        "interconnection", "grid connection", "large load", "load request",
+        "queue position", "transmission line", "transmission upgrade",
         "substation", "curtailment", "controllable load", "grid study",
-        "load study", "capacity shortfall", "cesir",
+        "load study", "capacity shortfall", "cesir", "utility approval",
     ]),
     ("SITE_ACQUIRED", [
-        "acquires site", "land purchase", "acres", "powered land", "powered shell",
-        "breaks ground", "groundbreaking", "rezoning", "entitlement", "site selection",
-        "purchases land",
+        "acquires site", "acquires land", "land acquisition", "land purchase",
+        "buys land", "purchases land", "purchases site", "secures site",
+        "site acquisition", "acres", "powered land", "powered shell",
+        "breaks ground", "groundbreaking", "begins construction",
+        "starts construction", "construction begins", "rezoning",
+        "entitlement", "site selection",
     ]),
     ("DELAY_REPORTED", [
-        "delayed", "delay", "paused", "halted", "moratorium", "cancels", "cancelled",
-        "scaled back", "shelved", "opposition", "rejected", "denied permit",
-        "lawsuit", "injunction",
+        "delayed", "delay", "paused", "pauses", "on hold", "halted",
+        "moratorium", "cancels", "cancelled", "scaled back", "shelved",
+        "scraps", "abandons", "withdraws", "withdrawn", "opposition",
+        "pushback", "residents oppose", "protest", "rejected", "rejects",
+        "blocked", "blocks", "denied permit", "lawsuit", "injunction",
     ]),
     ("EXPANSION_EXERCISED", [
-        "expansion", "expands", "phase two", "phase 2", "additional capacity",
-        "exercises option", "second building", "adds ", "scaling up",
+        "expansion", "expands", "phase two", "phase 2", "second phase",
+        "phase three", "phase 3", "third phase", "additional capacity",
+        "doubles capacity", "exercises option", "second building",
+        "additional building", "adds ", "scaling up",
     ]),
     ("CAPACITY_ANNOUNCED", [
         "announces", "unveils", "new campus", "new data center", "to build",
-        "plans", "development", "gigawatt", "megawatt", "投",
+        "will build", "plans", "planning", "proposes", "proposed",
+        "development", "data center project", "hyperscale project",
+        "ai factory", "gigawatt", "megawatt", "投",
     ]),
 ]
+
+# ---------------------------------------------------------------------------
+# TOPICS — multi-label, orthogonal to event type. An event can be both
+# "Leasing & Demand" and "Hyperscale". The collector also derives three
+# topics without terms: Hyperscale (entity match), Neocloud & AI Compute
+# (entity match), International (metro in INTL_METROS).
+# ---------------------------------------------------------------------------
+
+TOPIC_RULES = {
+    "Leasing & Demand": [
+        "lease", "leasing", "leased", "preleas", "pre-leas", "tenant",
+        "colocation", "offtake", "take-or-pay", "absorption", "vacancy",
+        "occupancy", "rental rate", "asking rate", "capacity agreement",
+        "capacity deal", "demand",
+    ],
+    "Hyperscale": [
+        "hyperscale", "hyperscaler", "cloud giant", "capex", "self-build",
+    ],
+    "Neocloud & AI Compute": [
+        "neocloud", "gpu cloud", "ai cloud", "gpu-as-a-service", "bare metal",
+        "training cluster", "inference", "ai factory", "supercomputer",
+        "compute capacity", "ai infrastructure",
+    ],
+    "Power & Grid": [
+        "power", "grid", "interconnection", "substation", "transmission",
+        "megawatt", "gigawatt", "utility", "ppa", "nuclear", "smr",
+        "gas turbine", "generation", "electricity", "curtailment",
+        "behind-the-meter", "energization",
+    ],
+    "Financing & M&A": [
+        "financing", "loan", "debt", "bond", "securitization", "raises",
+        "funding", "acquisition", "merger", "stake", "valuation",
+        "investment", "fund", "ipo", "equity",
+    ],
+    "Land & Construction": [
+        "land", "acres", "site", "construction", "breaks ground",
+        "groundbreaking", "zoning", "rezoning", "entitlement", "permit",
+        "campus", "powered shell", "build-out",
+    ],
+    "Chips & Hardware": [
+        "gpu", "chip", "semiconductor", "accelerator", "nvidia", "blackwell",
+        "rubin", "hbm", "tpu", "trainium", "asic", "rack density", "server",
+        "networking", "optical",
+    ],
+    "Policy & Community": [
+        "moratorium", "opposition", "tax", "incentive", "abatement",
+        "regulation", "rulemaking", "legislation", "ordinance", "community",
+        "residents", "lawsuit", "tariff",
+    ],
+    "Cooling & Water": [
+        "cooling", "liquid cooling", "water", "immersion", "chiller",
+        "heat reuse", "waste heat",
+    ],
+}
 
 # ---------------------------------------------------------------------------
 # SIGNAL DICTIONARIES — presence flags, not event types
@@ -295,4 +470,7 @@ AMBIGUOUS_TERMS = {
     "vantage", "aligned", "switch", "compass", "prime", "stack infrastructure",
     "meta", "apple", "oracle", "lambda", "together ai", "galaxy digital",
     "dominion", "ares management", "spp", "loc",
+    # a tract of land / edged out / constellation of / cortex / streaming
+    "tract", "edged", "constellation", "cortex", "stream data centers",
+    "tesla",  # Tesla coil contexts are rare, but keep the capitalisation gate
 }
