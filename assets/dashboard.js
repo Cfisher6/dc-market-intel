@@ -835,7 +835,8 @@
         return fmt(mw) + basis;
       }
       var agg = aggMwOf(ev);
-      if (agg) return '<span class="mw-agg" title="Market/queue aggregate, not a campus figure">' + fmt(agg) + " agg</span>";
+      if (agg) return '<span class="mw-agg" title="Market/queue aggregate, not a campus figure">' +
+        fmt(agg) + '<span class="mw-basis">agg</span></span>';
       return "—";
     }
 
@@ -879,7 +880,10 @@
           '<tr class="ev-row" data-id="' + esc(ev.id) + '">' +
             '<td class="pin-col"><button type="button" class="pin-btn' + (pins[ev.id] ? " pinned" : "") +
               '" data-pin="' + esc(ev.id) + '" title="' + (pins[ev.id] ? "Unpin" : "Pin to watchlist") + '">★</button></td>' +
-            "<td>" + esc(ev.date || "—") + (isNew ? ' <span class="new-flag">NEW</span>' : "") + "</td>" +
+            // Date and the NEW badge stack instead of sharing a line — side
+            // by side they overflowed the column and broke the date in two.
+            '<td class="col-date"><span class="date-val">' + esc(ev.date || "—") + "</span>" +
+              (isNew ? '<span class="new-flag">NEW</span>' : "") + "</td>" +
             '<td><span class="pill pill-' + typeColor(ev.event_type) + '">' + esc(typeLabel(ev.event_type)) + "</span></td>" +
             "<td>" + srcLink(ev.url, ev.title) + "</td>" +
             "<td>" + (partyChips || "—") + "</td>" +
@@ -887,7 +891,7 @@
             '<td class="num">' + mwCell(ev) + "</td>" +
             '<td class="num">' + moneyLabel(money) + "</td>" +
             "<td>" + (signalBadges(ev) || "—") + "</td>" +
-            "<td>" + esc(ev.source) + "</td>" +
+            '<td class="ctr">' + esc(ev.source) + "</td>" +
             '<td class="num">' + esc(scoreOf(ev)) + "</td>" +
           "</tr>";
         if (expanded[ev.id]) rows += '<tr class="det-row">' + detailRow(ev) + "</tr>";
