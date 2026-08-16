@@ -220,7 +220,11 @@ th {
   color: var(--slate); font-weight: 500;
   padding: 0 12px 8px 0; border-bottom: 1px solid var(--ink);
 }
-th.num, td.num { text-align: right; padding-right: 0; }
+/* Right-aligned cells sit flush to their own right edge, which jams them
+   against whatever column follows ("$14.8B2026-07-28"). Keep the gap, and
+   drop it only for the final column so the table still ends flush. */
+th.num, td.num { text-align: right; padding-right: 14px; }
+tr > th.num:last-child, tr > td.num:last-child { padding-right: 0; }
 td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
 td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
 /* Figures never break across lines, in any table on the site. */
@@ -342,16 +346,16 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
 /* Fixed layout so the colgroup is authoritative. Auto-layout was handing
    Headline 380px while squeezing MW to 33px and breaking dates across two
    lines. min-width keeps the grid honest and scrolls rather than crushing. */
-#dash-table { min-width: 1040px; table-layout: fixed; }
+#dash-table { min-width: 1080px; table-layout: fixed; }
 #dash-table col.c-pin      { width: 32px; }
 #dash-table col.c-date     { width: 88px; }
 #dash-table col.c-type     { width: 112px; }
 #dash-table col.c-headline { width: auto; }   /* takes the remainder */
 #dash-table col.c-parties  { width: 112px; }
-#dash-table col.c-location { width: 104px; }
-#dash-table col.c-mw       { width: 64px; }
-#dash-table col.c-money    { width: 68px; }
-#dash-table col.c-signals  { width: 84px; }
+#dash-table col.c-location { width: 124px; }
+#dash-table col.c-mw       { width: 74px; }
+#dash-table col.c-money    { width: 80px; }
+#dash-table col.c-signals  { width: 74px; }
 #dash-table col.c-source   { width: 58px; }
 #dash-table col.c-score    { width: 52px; }
 
@@ -382,11 +386,12 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
    column width worth giving this. */
 #dash-table td:nth-child(3) span { white-space: normal; }
 
-/* Party and location chips: wrap to a new line, and ellipsis the rare name
-   that is wider than its column instead of bleeding into the neighbour. */
+/* Party and location chips wrap rather than truncate. Clipping "Northern
+   Virginia" to "Northern Vir…" hides the metro, which is the column's whole
+   job; a two-line chip is uglier than an ellipsis but never lies. */
 #dash-table td:nth-child(5), #dash-table td:nth-child(6) { white-space: normal; }
 #dash-table td:nth-child(5) .chip, #dash-table td:nth-child(6) .chip {
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
 }
 
 /* MW basis (IT / gross) sits under the figure, not beside it. */

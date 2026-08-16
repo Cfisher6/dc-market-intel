@@ -143,6 +143,9 @@
   }
   function moneyLabel(v) {
     if (v == null) return "—";
+    // Values are $M. Roll up past a billion so cumulative sums don't render
+    // as "$1050.0B".
+    if (v >= 1e6) return "$" + (v / 1e6).toFixed(1) + "T";
     return v >= 1000 ? "$" + (v / 1000).toFixed(1) + "B" : "$" + fmt(Math.round(v)) + "M";
   }
   function parties(ev) {
