@@ -57,12 +57,15 @@ SOURCES = [
     # onto every item from this source — the filing index text never restates
     # the company name (the feed is already scoped by CIK), so ordinary
     # keyword matching would never resolve a counterparty on its own.
+    # `tier` feeds confidence_tier on every event from the source. Omitted
+    # means "trade_press" — only add "primary" for filings and first-party
+    # disclosure.
     {"name": "SEC EDGAR — Digital Realty (DLR) 8-K", "short": "SEC-DLR",
      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001297996&type=8-K&dateb=&owner=include&count=40&output=atom",
-     "implied_party": "Digital Realty"},
+     "implied_party": "Digital Realty", "tier": "primary"},
     {"name": "SEC EDGAR — Equinix (EQIX) 8-K", "short": "SEC-EQIX",
      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001101239&type=8-K&dateb=&owner=include&count=40&output=atom",
-     "implied_party": "Equinix"},
+     "implied_party": "Equinix", "tier": "primary"},
 ]
 
 # SEC filings cite 8-K Item numbers instead of prose ("Item 2.03: Creation of
@@ -325,12 +328,39 @@ EVENT_RULES = [
         "starts construction", "construction begins", "rezoning",
         "entitlement", "site selection",
     ]),
+    # Both incentive types sit above DELAY_REPORTED: "county rejects tax break"
+    # is an incentive outcome, not a generic delay, and DELAY_REPORTED's
+    # "rejects"/"denied" would otherwise claim it first. REVOKED precedes
+    # APPROVED for the same reason — "revokes tax abatement" contains the
+    # APPROVED term "tax abatement".
+    ("INCENTIVE_REVOKED", [
+        "revokes abatement", "abatement revoked", "revokes incentive",
+        "incentive revoked", "rescinds incentive", "rescinds abatement",
+        "repeals exemption", "repeals incentive", "denies abatement",
+        "denies tax break", "rejects tax break", "rejects abatement",
+        "rejects incentive", "denies incentive", "clawback", "claws back",
+        "ends tax break", "terminates abatement", "withdraws incentive",
+        "strips tax break", "loses tax break", "incentive denied",
+    ]),
+    ("INCENTIVE_APPROVED", [
+        "tax abatement", "abatement approved", "approves abatement",
+        "pilot agreement", "payment in lieu of taxes", "sales tax exemption",
+        "tax exemption", "tax incentive", "tax break", "incentive package",
+        "economic development agreement", "chapter 313", "chapter 403",
+        "enterprise zone", "approves incentive", "grants incentive",
+        "incentive approved", "property tax reduction", "tax increment financing",
+        "tif district", "incentive bill", "incentive legislation",
+    ]),
+    # Really "friction/opposition news" — opposition_status (below) records
+    # where it actually stands, including a moratorium being lifted.
     ("DELAY_REPORTED", [
         "delayed", "delay", "paused", "pauses", "on hold", "halted",
         "moratorium", "cancels", "cancelled", "scaled back", "shelved",
         "scraps", "abandons", "withdraws", "withdrawn", "opposition",
         "pushback", "residents oppose", "protest", "rejected", "rejects",
         "blocked", "blocks", "denied permit", "lawsuit", "injunction",
+        "ordinance", "zoning restriction", "restrictions on data centers",
+        "public hearing", "would restrict", "moves to restrict",
     ]),
     ("EXPANSION_EXERCISED", [
         "expansion", "expands", "phase two", "phase 2", "second phase",
@@ -344,6 +374,87 @@ EVENT_RULES = [
         "development", "data center project", "hyperscale project",
         "ai factory", "gigawatt", "megawatt", "投",
     ]),
+]
+
+# ---------------------------------------------------------------------------
+# OPPOSITION SUB-STATUS
+# ---------------------------------------------------------------------------
+# DELAY_REPORTED is a flat bucket: "residents object" and "moratorium enacted"
+# are not the same fact. This resolves one level further, so the county
+# opposition heatmap can colour by where a fight actually stands.
+#
+# Applied ONLY to DELAY_REPORTED events. Order matters — first match wins, and
+# the ordering is deliberate:
+#   - overturned first: its phrases contain the bare word "moratorium"
+#   - proposed before passed: "considers a moratorium" is not a moratorium
+
+OPPOSITION_STATUS = [
+    ("moratorium_overturned", [
+        "overturns moratorium", "moratorium overturned", "lifts moratorium",
+        "moratorium lifted", "repeals moratorium", "ends moratorium",
+        "moratorium expires", "moratorium expired", "rejects moratorium",
+        "moratorium rejected", "moratorium defeated", "strikes down",
+        "overturns ban", "lifts ban", "ban lifted",
+    ]),
+    ("lawsuit_filed", [
+        "lawsuit", "sues", "sued", "litigation", "injunction", "files suit",
+        "legal challenge", "court challenge", "appeal filed", "petition filed",
+    ]),
+    ("proposed_ordinance", [
+        "proposed ordinance", "draft ordinance", "ordinance",
+        "proposed restrictions", "zoning amendment", "public hearing",
+        "would restrict", "moves to restrict", "proposed moratorium",
+        # Standalone intent verbs. These are generic English, but they only
+        # ever run against events already typed DELAY_REPORTED, so the
+        # opposition context is established. They must be standalone rather
+        # than phrases like "considers moratorium" because real headlines put
+        # words in between ("considers data center moratorium").
+        "considers", "considering", "calls for", "proposes", "weighs",
+        "mulls", "seeks to", "pushes for", "would impose", "could impose",
+        "may impose", "debating", "vote on", "to vote",
+    ]),
+    ("moratorium_passed", [
+        "moratorium passed", "passes moratorium", "approves moratorium",
+        "enacts moratorium", "imposes moratorium", "moratorium approved",
+        "moratorium in effect", "enacts ban", "bans data center",
+        "moratorium",  # bare fallback: only reached if none of the above hit
+    ]),
+]
+
+# Heatmap colour ramp. 0 = resolved in the developer's favour, 3 = hardest
+# block. An event with no status match carries opposition_status = None.
+OPPOSITION_SEVERITY = {
+    "moratorium_overturned": 0,
+    "proposed_ordinance": 1,
+    "lawsuit_filed": 2,
+    "moratorium_passed": 3,
+}
+
+# ---------------------------------------------------------------------------
+# CONFIDENCE
+# ---------------------------------------------------------------------------
+# Orthogonal to relevance. Relevance says "how much does this matter";
+# confidence says "how much should you trust it before verifying".
+#
+#   primary      a filing, rating-agency report, or direct company disclosure
+#   trade_press  a reporting outlet covering it
+#   unconfirmed  single-source, anonymous-sourced, or explicitly rumoured
+#
+# A source carries a baseline tier (SOURCES[].tier, default "trade_press").
+# Trade-press items get downgraded to "unconfirmed" when the text hedges.
+# A primary source is never downgraded — a filing is a filing.
+
+CONFIDENCE_TIERS = ("primary", "trade_press", "unconfirmed")
+
+RUMOR_TERMS = [
+    "reportedly", "reported to be", "sources say", "sources said",
+    "people familiar", "person familiar", "familiar with the matter",
+    "rumor", "rumored", "rumour", "rumoured", "unconfirmed",
+    "is said to", "said to be", "according to sources", "anonymous sources",
+    "speculation", "speculated", "in talks", "exploring a sale",
+    "weighing a sale", "not been confirmed",
+    # "declined to comment" deliberately absent — it appears in plenty of
+    # well-sourced confirmed reporting and would downgrade solid stories.
 ]
 
 # ---------------------------------------------------------------------------

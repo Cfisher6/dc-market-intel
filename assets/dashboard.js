@@ -26,6 +26,8 @@
     "POWER_SECURED": "Power secured",
     "INTERCONNECT_FILED": "Interconnect filed",
     "SITE_ACQUIRED": "Site acquired",
+    "INCENTIVE_APPROVED": "Incentive approved",
+    "INCENTIVE_REVOKED": "Incentive revoked",
     "DELAY_REPORTED": "Delay reported",
     "EXPANSION_EXERCISED": "Expansion exercised",
     "CAPACITY_ANNOUNCED": "Capacity announced",
@@ -39,6 +41,8 @@
     "POWER_SECURED": "amber",
     "INTERCONNECT_FILED": "amber",
     "SITE_ACQUIRED": "ink",
+    "INCENTIVE_APPROVED": "green",
+    "INCENTIVE_REVOKED": "red",
     "DELAY_REPORTED": "red",
     "EXPANSION_EXERCISED": "green",
     "CAPACITY_ANNOUNCED": "neutral",
@@ -154,6 +158,11 @@
     return '<a class="src-inline" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(label || "source") + "</a>";
   }
   function firstSeen(ev) { return ev.first_seen || ev.date || ""; }
+  /* Schema 2 renamed `score` -> `relevance_score`. Fall back so archived
+     records written before scripts/backfill_schema.py ran still render. */
+  function scoreOf(ev) {
+    return ev.relevance_score != null ? ev.relevance_score : (ev.score != null ? ev.score : 0);
+  }
 
   function loadPins() {
     try { return JSON.parse(localStorage.getItem(PIN_KEY)) || {}; }
@@ -222,7 +231,7 @@
       if (state.power && (ev.power_entities || []).indexOf(state.power) === -1) return false;
       if (state.mwMin) { var mw = mwOf(ev); if (!mw || mw < state.mwMin) return false; }
       if (state.moneyMin) { var mo = moneyOf(ev); if (!mo || mo < state.moneyMin) return false; }
-      if (state.scoreMin && ev.score < state.scoreMin) return false;
+      if (state.scoreMin && scoreOf(ev) < state.scoreMin) return false;
       if (state.from && (!ev.date || ev.date < state.from)) return false;
       if (state.to && (!ev.date || ev.date > state.to)) return false;
       if (state.newOnly && firstSeen(ev) !== latestRun) return false;
@@ -243,7 +252,7 @@
         else if (key === "parties") { av = parties(a).join(); bv = parties(b).join(); }
         else if (key === "metro") { av = (a.metros || []).join(); bv = (b.metros || []).join(); }
         else if (key === "source") { av = a.source; bv = b.source; }
-        else { av = a.score; bv = b.score; }
+        else { av = scoreOf(a); bv = scoreOf(b); }
         if (av < bv) return -1 * dir;
         if (av > bv) return 1 * dir;
         return 0;
@@ -879,7 +888,7 @@
             '<td class="num">' + moneyLabel(money) + "</td>" +
             "<td>" + (signalBadges(ev) || "—") + "</td>" +
             "<td>" + esc(ev.source) + "</td>" +
-            '<td class="num">' + esc(ev.score) + "</td>" +
+            '<td class="num">' + esc(scoreOf(ev)) + "</td>" +
           "</tr>";
         if (expanded[ev.id]) rows += '<tr class="det-row">' + detailRow(ev) + "</tr>";
         return rows;
@@ -929,7 +938,7 @@
           mwOf(ev) || "", ev.mw_basis || "", aggMwOf(ev) || "", moneyOf(ev) || "",
           (ev.commercial_signals || []).join("; "), (ev.capacity_signals || []).join("; "),
           (ev.power_signals || []).join("; "),
-          ev.source, (ev.also_in || []).join("; "), ev.score, firstSeen(ev), ev.last_seen || ""
+          ev.source, (ev.also_in || []).join("; "), scoreOf(ev), firstSeen(ev), ev.last_seen || ""
         ].map(cell).join(","));
       });
       var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
