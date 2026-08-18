@@ -190,6 +190,23 @@
 
     var DEFAULTS = { type: "", topic: "", party: "", metro: "", power: "", mwMin: 0, moneyMin: 0, scoreMin: 0,
                      from: "", to: "", q: "", newOnly: false, pinnedOnly: false, sort: "score", dir: "desc" };
+
+    /* Breakdown selector: one card, one dimension at a time. Five stacked bar
+       cards cost ~300px above the table; tabs keep every dimension a click
+       away at a fifth of the height. `bdTab` persists across re-renders so
+       applying a filter doesn't bounce you back to the first tab.
+
+       Declared here, not beside renderBreakdowns(): the first rerender() runs
+       before that point in the file, and `var` would hoist these as undefined. */
+    var BD_TABS = [
+      { key: "topic", label: "Topic",        unit: "" },
+      { key: "type",  label: "Type",         unit: "" },
+      { key: "metro", label: "Location",     unit: "" },
+      { key: "party", label: "Counterparty", unit: "MW" },
+      { key: "power", label: "Power",        unit: "" }
+    ];
+    var bdTab = "topic";
+    var BD_ROWS = 6;  // rows per dimension — the card's whole height budget
     var state = readStateFromURL();
 
     /* --- party -> kind, derived from event membership ---------------------- */
@@ -271,7 +288,6 @@
     function rerender() {
       var filtered = sortList(events.filter(matches));
       renderSummary(filtered);
-      renderTimeline(filtered);
       renderMap(filtered);
       renderPipeline(filtered);
       renderBreakdowns(filtered);
@@ -462,61 +478,6 @@
         (note ? '<div class="metric-note">' + esc(note) + '</div>' : "") + '</div>';
     }
 
-    /* --- weekly activity timeline -------------------------------------------- */
-    function weekOf(dateStr) {
-      // Monday of the ISO week containing dateStr.
-      var d = new Date(dateStr + "T00:00:00Z");
-      if (isNaN(d)) return null;
-      var day = (d.getUTCDay() + 6) % 7; // Mon=0
-      d.setUTCDate(d.getUTCDate() - day);
-      return d.toISOString().slice(0, 10);
-    }
-    function renderTimeline(filtered) {
-      var byWeek = {};
-      filtered.forEach(function (ev) {
-        var w = ev.date ? weekOf(ev.date) : null;
-        if (!w) return;
-        var r = byWeek[w] || (byWeek[w] = { n: 0, mw: 0 });
-        r.n += 1;
-        r.mw += mwOf(ev) || 0;
-      });
-      var weeks = Object.keys(byWeek).sort();
-      if (weeks.length < 2) { el("dash-timeline").innerHTML = ""; return; }
-
-      // fill gaps so the x-axis is continuous
-      var run = [], cur = weeks[0], last = weeks[weeks.length - 1];
-      while (cur <= last) {
-        run.push(cur);
-        var d = new Date(cur + "T00:00:00Z");
-        d.setUTCDate(d.getUTCDate() + 7);
-        cur = d.toISOString().slice(0, 10);
-        if (run.length > 120) break; // safety
-      }
-
-      function chart(title, valFn, unit) {
-        var vals = run.map(function (w) { return byWeek[w] ? valFn(byWeek[w]) : 0; });
-        var max = Math.max.apply(null, vals.concat([1]));
-        var lastMonth = "";
-        var cols = run.map(function (w, i) {
-          var v = vals[i];
-          var month = w.slice(0, 7);
-          var lab = "";
-          if (month !== lastMonth) {
-            lastMonth = month;
-            lab = new Date(w + "T00:00:00Z").toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-          }
-          return '<div class="tl-col" title="Week of ' + esc(w) + " — " + fmt(Math.round(v)) + (unit ? " " + unit : "") + '">' +
-            '<div class="tl-fill" style="height:' + Math.max((v / max) * 100, v > 0 ? 3 : 0) + '%"></div>' +
-            '<div class="tl-lab">' + lab + "</div></div>";
-        }).join("");
-        return '<div class="tl-card"><h3>' + esc(title) + '</h3><div class="tl-chart">' + cols + "</div></div>";
-      }
-
-      el("dash-timeline").innerHTML =
-        chart("Events per week", function (r) { return r.n; }) +
-        chart("Announced MW per week", function (r) { return r.mw; }, "MW");
-    }
-
     /* --- activity map (metro-level, click a bubble to filter) ------------------ */
     // Declaration only — no initializer. The first rerender() runs before this
     // line, and `var x = null` here would clobber the map it already created.
@@ -689,7 +650,7 @@
         (keyFn(ev) || []).forEach(function (k) { counts[k] = (counts[k] || 0) + 1; });
       });
       return Object.keys(counts).map(function (k) { return [k, counts[k]]; })
-        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, BD_ROWS);
     }
     function mwByParty(list) {
       var mw = {};
@@ -699,33 +660,50 @@
         parties(ev).forEach(function (p) { mw[p] = (mw[p] || 0) + v; });
       });
       return Object.keys(mw).map(function (k) { return [k, Math.round(mw[k])]; })
-        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, BD_ROWS);
+    }
+
+    function bdData(which, filtered) {
+      if (which === "topic") return tally(filtered, function (e) { return e.topics; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
+      if (which === "type") return tally(filtered, function (e) { return [e.event_type]; })
+        .map(function (p) { return [typeLabel(p[0]), p[1], p[0]]; });
+      if (which === "metro") return tally(filtered, function (e) { return e.metros; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
+      if (which === "power") return tally(filtered, function (e) { return e.power_entities; })
+        .map(function (p) { return [p[0], p[1], p[0]]; });
+      return mwByParty(filtered).map(function (p) { return [p[0], p[1], p[0]]; });
     }
 
     function renderBreakdowns(filtered) {
-      var byTopic = tally(filtered, function (e) { return e.topics; })
-        .map(function (p) { return [p[0], p[1], p[0]]; });
-      var byType = tally(filtered, function (e) { return [e.event_type]; })
-        .map(function (p) { return [typeLabel(p[0]), p[1], p[0]]; });
-      var byMetro = tally(filtered, function (e) { return e.metros; })
-        .map(function (p) { return [p[0], p[1], p[0]]; });
-      var byPower = tally(filtered, function (e) { return e.power_entities; })
-        .map(function (p) { return [p[0], p[1], p[0]]; });
-      var byMW = mwByParty(filtered).map(function (p) { return [p[0], p[1], p[0]]; });
+      var active = BD_TABS.filter(function (t) { return t.key === bdTab; })[0] || BD_TABS[0];
+      var rows = bdData(active.key, filtered);
 
-      el("dash-breakdowns").innerHTML = '<div class="bd-grid">' +
-        breakdownCard("Events by topic", byTopic.length ? barRows(byTopic, "", "topic") : emptyNote()) +
-        breakdownCard("Events by type", byType.length ? barRows(byType, "", "type") : emptyNote()) +
-        breakdownCard("Events by location", byMetro.length ? barRows(byMetro, "", "metro") : emptyNote()) +
-        breakdownCard("MW by counterparty", byMW.length ? barRows(byMW, "MW", "party") : emptyNote()) +
-        breakdownCard("Events by power entity", byPower.length ? barRows(byPower, "", "power") : emptyNote()) +
-        "</div>" +
-        '<p class="bd-hint">Bars, party and location tags are filters — click to apply, click again to clear.</p>';
-    }
-    function breakdownCard(title, body) {
-      return '<div class="bd-card"><h3>' + esc(title) + "</h3>" + body + "</div>";
+      var tabs = BD_TABS.map(function (t) {
+        // A dimension with a filter applied gets a dot, so you can see where
+        // your constraints are without opening each tab.
+        var on = t.key === bdTab, set = !!state[t.key];
+        return '<button type="button" class="bd-tab' + (on ? " on" : "") + '" data-bdtab="' + t.key + '"' +
+          ' aria-selected="' + (on ? "true" : "false") + '">' + esc(t.label) +
+          (set ? '<span class="bd-dot" title="Filter applied"></span>' : "") + "</button>";
+      }).join("");
+
+      el("dash-breakdowns").innerHTML =
+        '<div class="bd-card bd-tabbed">' +
+          '<div class="bd-tabs" role="tablist">' + tabs +
+            '<span class="bd-hint-inline">click a bar to filter · again to clear</span>' +
+          "</div>" +
+          '<div class="bd-body">' +
+            (rows.length ? barRows(rows, active.unit, active.key) : emptyNote()) +
+          "</div>" +
+        "</div>";
     }
     function emptyNote() { return '<p class="bd-empty">No matches in current filter.</p>'; }
+
+    el("dash-breakdowns").addEventListener("click", function (e) {
+      var tab = e.target.closest ? e.target.closest(".bd-tab") : null;
+      if (tab) { bdTab = tab.dataset.bdtab; rerender(); }
+    });
 
     el("dash-breakdowns").addEventListener("click", function (e) {
       var row = e.target.closest ? e.target.closest(".bd-click") : null;
