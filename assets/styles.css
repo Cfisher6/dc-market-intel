@@ -220,9 +220,18 @@ th {
   color: var(--slate); font-weight: 500;
   padding: 0 12px 8px 0; border-bottom: 1px solid var(--ink);
 }
-th.num, td.num { text-align: right; padding-right: 0; }
+/* Right-aligned cells sit flush to their own right edge, which jams them
+   against whatever column follows ("$14.8B2026-07-28"). Keep the gap, and
+   drop it only for the final column so the table still ends flush. */
+th.num, td.num { text-align: right; padding-right: 14px; }
+tr > th.num:last-child, tr > td.num:last-child { padding-right: 0; }
 td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
 td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+/* Figures never break across lines, in any table on the site. */
+th.num, td.num { white-space: nowrap; }
+/* Header labels sit on the rule, so a two-word header doesn't push the
+   single-word ones out of alignment. */
+th { vertical-align: bottom; }
 tr:last-child td { border-bottom: 1px solid var(--rule); }
 td .sub { display: block; font-size: 0.76rem; color: var(--slate); margin-top: 3px; }
 .dash { color: var(--slate-lt); }
@@ -333,11 +342,60 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
 /* --- dashboard: table -------------------------------------------------------- */
 
 .dash-table-wrap { overflow-x: auto; }
-#dash-table { min-width: 860px; }
+
+/* Fixed layout so the colgroup is authoritative. Auto-layout was handing
+   Headline 380px while squeezing MW to 33px and breaking dates across two
+   lines. min-width keeps the grid honest and scrolls rather than crushing. */
+#dash-table { min-width: 1080px; table-layout: fixed; }
+#dash-table col.c-pin      { width: 32px; }
+#dash-table col.c-date     { width: 88px; }
+#dash-table col.c-type     { width: 112px; }
+#dash-table col.c-headline { width: auto; }   /* takes the remainder */
+#dash-table col.c-parties  { width: 112px; }
+#dash-table col.c-location { width: 124px; }
+#dash-table col.c-mw       { width: 74px; }
+#dash-table col.c-money    { width: 80px; }
+#dash-table col.c-signals  { width: 74px; }
+#dash-table col.c-source   { width: 58px; }
+#dash-table col.c-score    { width: 52px; }
+
+/* Rows are as tall as their headline (3-4 lines). Centring stops the short
+   cells — date, MW, $, score — from floating at the top of that box. */
+#dash-table tbody td { vertical-align: middle; }
+#dash-table thead th { vertical-align: bottom; }
+
+/* Numbers align on their digits and never wrap mid-figure. */
+#dash-table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#dash-table th.ctr, #dash-table td.ctr { text-align: center; padding-right: 0; }
+
 #dash-table th.sortable { cursor: pointer; user-select: none; }
 #dash-table th.sortable:hover { color: var(--ink); }
 #dash-table th.sortable::after { content: "⇅"; margin-left: 5px; color: var(--slate-lt); font-size: 0.85em; }
+/* The arrow is decoration; it must never be the reason a header wraps. */
+#dash-table th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-empty { color: var(--slate-lt); font-size: 0.88rem; padding: 30px 0; text-align: center; }
+
+/* Date: always one line, badge beneath rather than beside it. */
+.col-date .date-val { display: block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.col-date .new-flag { display: inline-block; margin-top: 4px; }
+
+/* Headline is the one cell allowed to breathe across lines. */
+#dash-table td:nth-child(4) { white-space: normal; overflow-wrap: anywhere; }
+
+/* Type pills wrap rather than spill: "Expansion exercised" is wider than any
+   column width worth giving this. */
+#dash-table td:nth-child(3) span { white-space: normal; }
+
+/* Party and location chips wrap rather than truncate. Clipping "Northern
+   Virginia" to "Northern Vir…" hides the metro, which is the column's whole
+   job; a two-line chip is uglier than an ellipsis but never lies. */
+#dash-table td:nth-child(5), #dash-table td:nth-child(6) { white-space: normal; }
+#dash-table td:nth-child(5) .chip, #dash-table td:nth-child(6) .chip {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}
+
+/* MW basis (IT / gross) sits under the figure, not beside it. */
+.mw-basis { display: block; margin-top: 1px; }
 
 .src-inline { color: var(--ink); text-decoration: none; }
 .src-inline:hover { color: var(--signal); text-decoration: underline; }
@@ -408,6 +466,7 @@ footer p { margin: 0 0 9px; max-width: 66ch; }
 /* --- dashboard: counterparty directory ------------------------------------------- */
 
 .dir-table { min-width: 640px; }
+.dir-table td { vertical-align: middle; }
 .dir-row { cursor: pointer; }
 .dir-row:hover td { background: #FBFBFA; }
 .dir-active td { background: var(--signal-bg); }

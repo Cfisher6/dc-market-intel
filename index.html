@@ -70,6 +70,15 @@
 
     <div class="dash-table-wrap">
       <table id="dash-table">
+        <!-- Widths are declared here rather than left to auto-layout, which
+             was starving MW to 33px and wrapping every date onto two lines.
+             Headline takes whatever is left. -->
+        <colgroup>
+          <col class="c-pin"><col class="c-date"><col class="c-type">
+          <col class="c-headline"><col class="c-parties"><col class="c-location">
+          <col class="c-mw"><col class="c-money"><col class="c-signals">
+          <col class="c-source"><col class="c-score">
+        </colgroup>
         <thead>
           <tr>
             <th class="pin-col" title="Pinned">★</th>
@@ -81,7 +90,7 @@
             <th class="num" data-sort="mw">MW</th>
             <th class="num" data-sort="money">$</th>
             <th>Signals</th>
-            <th data-sort="source">Source</th>
+            <th class="ctr" data-sort="source">Source</th>
             <th class="num" data-sort="score">Score</th>
           </tr>
         </thead>
