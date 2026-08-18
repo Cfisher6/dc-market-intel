@@ -171,10 +171,47 @@ window.DC_DATA = {
     gaps: [
       "Private transaction comps — $/MW, going-in yields. Not publicly disclosed; leaks into trade press irregularly.",
       "Platform valuations — mark-to-market on Vantage, Aligned, Switch, QTS. Only visible at transaction events.",
-      "Cap rate series — Green Street and similar are subscription. No free equivalent.",
-      "ABS issuance and spreads — KBRA / Moody's presale reports are often publicly viewable and are the best free path in. Not yet populated."
+      "Cap rate series — Green Street and similar are subscription. No free equivalent."
     ],
-    note: "This is the weakest layer under a public-sources-only constraint. Populate opportunistically from rating agency presales, REIT supplementals, and transaction press."
+    note: "This is the weakest layer under a public-sources-only constraint. Populate opportunistically from rating agency presales, REIT supplementals, and transaction press.",
+
+    /* -----------------------------------------------------------------------
+       RATING-AGENCY ABS / CMBS  —  MANUAL ENTRY
+       -----------------------------------------------------------------------
+       Presale and surveillance reports on data-center securitizations are the
+       only public window into private operators' lease books: tenant names,
+       weighted-average remaining lease term, and tenant credit quality for
+       Vantage, Aligned, CyrusOne, Switch, Stack and others that file nothing
+       with the SEC.
+
+       Hand-entered on purpose. Each agency gates its reports differently
+       (registration walls, JS-rendered viewers, PDF-only), so automated
+       collection needs per-site handling; do that once the field mapping has
+       proven itself here. This array is NOT written by scripts/collect.py.
+
+       THE NO-BLENDING RULE APPLIES, and harder than it does to CBRE vs JLL.
+       Agencies do not compute these alike: WALT may or may not include
+       extension options, "investment grade %" may be by NRSF, by base rent,
+       or by MW, and shadow ratings are not issuer ratings. Always filter by
+       `agency` before comparing anything. Never average across agencies.
+
+       Every record REQUIRES a live `url` to the public report. If you cannot
+       link it, do not enter it.
+
+       Field schema — one object per rated transaction:
+         deal          string   full transaction name, e.g. "Vantage Data Centers Issuer, LLC 2026-1"
+         sponsor       string   operator/platform, matched to ontology OPERATORS where possible
+         agency        string   "KBRA" | "Moody's" | "DBRS" | "Fitch"  (required — drives the no-blend pill)
+         report_type   string   "presale" | "surveillance"
+         as_of         string   report date, ISO
+         size_musd     number   deal size, $M
+         walt_years    number   weighted-average remaining lease term AS THE AGENCY DEFINES IT
+         walt_basis    string   how that WALT was computed, verbatim where possible
+         tenants       string[] named tenants disclosed in the report
+         credit_note   string   tenant credit quality as stated — do not paraphrase into a rating
+         url           string   REQUIRED, public link to the report
+       ----------------------------------------------------------------------- */
+    abs_deals: []
   },
 
   /* -----------------------------------------------------------------------

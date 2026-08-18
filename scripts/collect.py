@@ -13,7 +13,8 @@ detection and discarded. What persists is derived signals plus a link.
 Run:  python scripts/collect.py [--days 14] [--no-network]
 """
 
-import argparse, datetime as dt, hashlib, html, json, os, re, sys, time, urllib.parse
+import argparse, datetime as dt, hashlib, html, json, os, re, sys, time
+import urllib.error, urllib.parse, urllib.request
 from difflib import SequenceMatcher
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,28 +41,45 @@ def _feedparser():
 # — requests without one are rejected outright.
 FEED_UA = "dc-market-intel/1.0 (public-source research; github.com/Cfisher6/dc-market-intel; contact cyrusconnor2109@gmail.com)"
 
+# SEC's WAF 403s any User-Agent containing a URL — FEED_UA's github.com link
+# is enough to be refused, every time, on every sec.gov endpoint. Verified by
+# alternating both strings against the same URL with 6s spacing: the
+# URL-bearing UA failed 2/2 and this one succeeded 2/2, so it is the UA and
+# not rate limiting. SEC asks for declared identity + contact only:
+# https://www.sec.gov/os/webmaster-faq
+SEC_UA = "dc-market-intel research cyrusconnor2109@gmail.com"
+
+def ua_for(url):
+    return SEC_UA if re.search(r"//(www\.|data\.)?sec\.gov/", url or "") else FEED_UA
+
 
 def _parse(url):
     """Fetch via urllib with a compliant User-Agent, then hand the bytes to
     feedparser. feedparser's own request_headers kwarg does not reliably
     reach SEC EDGAR, which requires a descriptive UA and 403s the default
-    fetch outright — so we can't just call feedparser.parse(url) for it."""
+    fetch outright — so we can't just call feedparser.parse(url) for it.
+
+    Returns (parsed, error). Transport failures are returned rather than
+    swallowed: reporting them as "no entries" hid a persistent SEC 403 behind
+    a message that pointed at the feed URL instead of the request."""
     import urllib.request
     feedparser = _feedparser()
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": FEED_UA})
+        req = urllib.request.Request(url, headers={"User-Agent": ua_for(url)})
         with urllib.request.urlopen(req, timeout=20) as r:
             body = r.read()
-    except Exception:
-        return feedparser.parse(b"")
-    return feedparser.parse(body)
+    except urllib.error.HTTPError as e:
+        return feedparser.parse(b""), f"HTTP {e.code} from source"
+    except Exception as e:
+        return feedparser.parse(b""), f"{type(e).__name__}: {e}"
+    return feedparser.parse(body), None
 
 
 def discover_feed(homepage):
     """Try RSS autodiscovery when a direct feed URL fails."""
     import urllib.request
     try:
-        req = urllib.request.Request(homepage, headers={"User-Agent": FEED_UA})
+        req = urllib.request.Request(homepage, headers={"User-Agent": ua_for(homepage)})
         with urllib.request.urlopen(req, timeout=20) as r:
             body = r.read(400_000).decode("utf-8", "ignore")
     except Exception:
@@ -82,17 +100,18 @@ def fetch_sources(days):
         if i:
             time.sleep(1)  # polite spacing — avoids tripping burst rate limits (SEC EDGAR is strict about this)
         url, note = src["url"], "direct"
-        parsed = _parse(url)
+        parsed, err = _parse(url)
 
         if not parsed.entries and src.get("fallback"):
             found = discover_feed(src["fallback"])
             if found:
                 url, note = found, "autodiscovered"
-                parsed = _parse(url)
+                parsed, err2 = _parse(url)
+                err = err2 or err
 
         if not parsed.entries:
             report.append({"source": src["name"], "ok": False, "count": 0,
-                           "note": "no entries — check feed URL in ontology.py SOURCES"})
+                           "note": err or "no entries — check feed URL in ontology.py SOURCES"})
             continue
 
         n = 0
@@ -170,6 +189,15 @@ def dedupe(items):
         if k in seen_urls:
             continue
         seen_urls.add(k)
+        # Filing indexes are titled formulaically — every 8-K is literally
+        # "8-K - Current report", so fuzzy title matching scores 1.000 and
+        # collapses a company's entire filing history (and both companies'
+        # 8-Ks) into a single event. Their identity is the accession URL,
+        # already deduped above. Fuzzy matching exists to catch the same
+        # story syndicated across outlets; it does not apply here.
+        if it.get("source_tier") == "primary":
+            kept.append(it)
+            continue
         nt = norm_title(it["title"])
         dup = next((k2 for k2 in kept if SequenceMatcher(None, nt, norm_title(k2["title"])).ratio() > 0.86), None)
         if dup:
@@ -312,7 +340,7 @@ def fetch_article_text(url):
     the whole page. NEVER persisted — derived signals only, per the README."""
     import urllib.request
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": FEED_UA})
+        req = urllib.request.Request(url, headers={"User-Agent": ua_for(url)})
         with urllib.request.urlopen(req, timeout=15) as r:
             body = r.read(600_000).decode("utf-8", "ignore")
     except Exception:
@@ -363,9 +391,17 @@ def build_events(items, deep=False):
         if is_noise(text):
             continue
         text = text + " " + sec_item_hints(text)
+        # SEC filing indexes title themselves "8-K - Current report", which
+        # says nothing about who filed — the feed is scoped by CIK, so the
+        # name never appears. Prefix it so the row is legible on its own.
+        title = it["title"]
+        implied_name = it.get("implied_party")
+        if implied_name and implied_name.lower() not in title.lower():
+            title = f"{implied_name} — {title}".strip()
+
         ev = {
             "id": hashlib.sha1(norm_url(it["url"]).encode()).hexdigest()[:10],
-            "title": it["title"],
+            "title": title,
             "url": it["url"],
             "date": it["date"],
             "source": it["source"],
