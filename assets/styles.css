@@ -196,6 +196,9 @@ h2.sec:first-of-type { margin-top: 0; }
 }
 .pill.cbre { border-color: #B9C6D2; color: #3C5670; background: #F0F5F9; }
 .pill.jll  { border-color: #C8C0D6; color: #56487A; background: #F4F1F9; }
+/* Rating agency. Deliberately one shared style, not per-agency colours — the
+   pill exists to stop figures being blended, not to brand the agency. */
+.pill.agency { border-color: #C4C0AE; color: #6B5F2E; background: #F8F6EC; }
 
 .src {
   display: block; margin-top: 10px;

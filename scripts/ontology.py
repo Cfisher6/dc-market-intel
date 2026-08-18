@@ -66,6 +66,15 @@ SOURCES = [
     {"name": "SEC EDGAR — Equinix (EQIX) 8-K", "short": "SEC-EQIX",
      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001101239&type=8-K&dateb=&owner=include&count=40&output=atom",
      "implied_party": "Equinix", "tier": "primary"},
+    # CoreWeave: the only pure-play neocloud filing with the SEC, so the only
+    # one whose lease obligations and customer concentration are visible at
+    # all. Periodic reports rather than 8-K — the operating-lease commitments
+    # and customer-concentration disclosures live in 10-Q/10-K, not current
+    # reports. CIK confirmed against SEC's own company_tickers.json, not
+    # guessed.
+    {"name": "SEC EDGAR — CoreWeave (CRWV) periodic", "short": "SEC-CRWV",
+     "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001769628&type=10-&dateb=&owner=include&count=40&output=atom",
+     "implied_party": "CoreWeave", "tier": "primary"},
 ]
 
 # SEC filings cite 8-K Item numbers instead of prose ("Item 2.03: Creation of
