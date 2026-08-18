@@ -202,6 +202,12 @@
     });
 
     /* --- source health ----------------------------------------------------- */
+    /* short code -> full outlet name, so a summary can name its publisher
+       rather than leaning on the abbreviation in the Source column. */
+    var SOURCE_NAMES = {};
+    F.sources.forEach(function (r) { if (r.short) SOURCE_NAMES[r.short] = r.source; });
+    function outletName(code) { return SOURCE_NAMES[code] || code; }
+
     var ok = F.sources.filter(function (r) { return r.ok; });
     var bad = F.sources.filter(function (r) { return !r.ok; });
     el("dash-source-health").textContent =
@@ -223,8 +229,8 @@
 
     /* --- matching / sorting ------------------------------------------------ */
     function haystack(ev) {
-      return (ev.title + " " + parties(ev).join(" ") + " " + (ev.metros || []).join(" ") + " " +
-              (ev.power_entities || []).join(" ")).toLowerCase();
+      return (ev.title + " " + (ev.summary || "") + " " + parties(ev).join(" ") + " " +
+              (ev.metros || []).join(" ") + " " + (ev.power_entities || []).join(" ")).toLowerCase();
     }
     function matches(ev) {
       if (state.type && ev.event_type !== state.type) return false;
@@ -849,6 +855,8 @@
         return val ? '<div class="det-item"><span class="metric-label">' + label + "</span> " + val + "</div>" : "";
       }
       return '<td colspan="11"><div class="det-grid">' +
+        (ev.summary ? '<div class="det-item det-summary"><span class="metric-label">Summary — ' +
+          esc(outletName(ev.source)) + "</span> " + esc(ev.summary) + "</div>" : "") +
         dl("Topics", (ev.topics || []).join(", ")) +
         dl("First seen", esc(firstSeen(ev))) +
         dl("Last seen", esc(ev.last_seen || "")) +
@@ -888,7 +896,10 @@
             '<td class="col-date"><span class="date-val">' + esc(ev.date || "—") + "</span>" +
               (isNew ? '<span class="new-flag">NEW</span>' : "") + "</td>" +
             '<td><span class="pill pill-' + typeColor(ev.event_type) + '">' + esc(typeLabel(ev.event_type)) + "</span></td>" +
-            "<td>" + srcLink(ev.url, ev.title) + "</td>" +
+            "<td>" + srcLink(ev.url, ev.title) +
+              (ev.summary ? '<p class="ev-summary">' + esc(ev.summary) +
+                '<span class="ev-cite"> — ' + esc(outletName(ev.source)) + "</span></p>" : "") +
+            "</td>" +
             "<td>" + (partyChips || "—") + "</td>" +
             "<td>" + (metroChips || "—") + "</td>" +
             '<td class="num">' + mwCell(ev) + "</td>" +
@@ -929,7 +940,7 @@
     /* --- CSV export -------------------------------------------------------------- */
     function exportCSV() {
       var filtered = sortList(events.filter(matches));
-      var cols = ["date", "event_type", "topics", "title", "url", "parties", "metros", "power_entities",
+      var cols = ["date", "event_type", "topics", "title", "summary", "url", "parties", "metros", "power_entities",
                   "mw_campus_max", "mw_basis", "mw_aggregate_max", "money_musd_max",
                   "commercial_signals", "capacity_signals", "power_signals",
                   "source", "also_in", "score", "first_seen", "last_seen"];
@@ -940,7 +951,7 @@
       var lines = [cols.join(",")];
       filtered.forEach(function (ev) {
         lines.push([
-          ev.date, ev.event_type, (ev.topics || []).join("; "), ev.title, ev.url,
+          ev.date, ev.event_type, (ev.topics || []).join("; "), ev.title, ev.summary || "", ev.url,
           parties(ev).join("; "), (ev.metros || []).join("; "), (ev.power_entities || []).join("; "),
           mwOf(ev) || "", ev.mw_basis || "", aggMwOf(ev) || "", moneyOf(ev) || "",
           (ev.commercial_signals || []).join("; "), (ev.capacity_signals || []).join("; "),

@@ -100,9 +100,32 @@ with `--no-deep`.
 
 ### What it never does
 
-Store article body text. Full text is fetched into memory for signal detection
-and discarded. What persists is derived signals plus a link. Aggregating and
-linking is what RSS is for; republishing prose is infringement.
+Store article **body** text. The deep scan fetches full text into memory for
+signal detection and discards it. What persists is derived signals, a link,
+and the one narrow exception below.
+
+### The one exception: RSS standfirsts
+
+Each event carries a `summary` — the publisher's own syndicated RSS
+`<summary>` field, capped at 220 characters at a word boundary, always shown
+with the outlet named and linked back.
+
+This is a deliberate amendment to the rule above, and the line it draws is
+worth stating precisely:
+
+- **Persisted:** the short standfirst a publisher puts in their feed *for the
+  purpose of syndication*. Showing it with attribution and a link is what
+  every RSS reader does, and what the field exists for.
+- **Never persisted:** anything `fetch_article_text()` scrapes. That is body
+  prose the publisher did not syndicate. `deep_scan()` never writes to
+  `summary` — there is a comment in `collect.py` saying so; keep it true.
+
+Feeds that just repeat the headline in the description contribute nothing and
+are dropped rather than stored twice.
+
+Events collected before this field existed have no summary and cannot get
+one — the historical RSS text was never kept. They will show a headline only
+until they fall out of the store.
 
 ### Tuning it
 

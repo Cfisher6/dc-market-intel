@@ -134,7 +134,8 @@ def fetch_sources(days):
                 "source_tier": src.get("tier", "trade_press"),
             })
             n += 1
-        report.append({"source": src["name"], "ok": True, "count": n, "note": note, "url": url})
+        report.append({"source": src["name"], "short": src["short"], "ok": True,
+                       "count": n, "note": note, "url": url})
 
     return items, report
 
@@ -352,6 +353,25 @@ def fetch_article_text(url):
     text = re.sub(r"\s+", " ", html.unescape(text))
     return text[:20000], scoped
 
+SUMMARY_CAP = 220
+_RE_WS = re.compile(r"\s+")
+
+def clean_summary(raw, title):
+    """The publisher's own RSS <summary> standfirst, capped at a word boundary.
+
+    This is the ONE piece of publisher prose that persists, and it is
+    deliberately narrow: it comes only from the syndicated feed field, never
+    from deep_scan's fetched article body. Feeds that simply repeat the
+    headline contribute nothing, so those are dropped."""
+    s = _RE_WS.sub(" ", re.sub(r"<[^>]+>", " ", html.unescape(raw or ""))).strip()
+    if not s:
+        return ""
+    if norm_title(s)[:60] == norm_title(title)[:60]:
+        return ""
+    if len(s) <= SUMMARY_CAP:
+        return s
+    return s[:SUMMARY_CAP].rsplit(" ", 1)[0].rstrip(" ,;:—-–") + "…"
+
 def party_category(name):
     for d in (O.HYPERSCALERS, O.NEOCLOUDS, O.OPERATORS, O.CAPITAL):
         if name in d:
@@ -402,6 +422,7 @@ def build_events(items, deep=False):
         ev = {
             "id": hashlib.sha1(norm_url(it["url"]).encode()).hexdigest()[:10],
             "title": title,
+            "summary": clean_summary(it.get("summary"), it["title"]),
             "url": it["url"],
             "date": it["date"],
             "source": it["source"],
@@ -485,6 +506,10 @@ def deep_scan(events, texts):
         # from headline + summary; full bodies routinely contain hedging
         # boilerplate ("sources say", "in talks") describing background rather
         # than the reported fact, which would downgrade solid stories.
+        #
+        # ev["summary"] is likewise never touched here. It holds the
+        # publisher's syndicated RSS standfirst; `body` below is scraped
+        # article text, which must stay in memory and never be persisted.
         ev["deep_scan"] = True
         ev["relevance_score"] = score(ev)
         enriched += 1
