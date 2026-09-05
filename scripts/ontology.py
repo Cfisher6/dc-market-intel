@@ -103,6 +103,10 @@ MANUAL_SOURCES = [
 # ---------------------------------------------------------------------------
 
 HYPERSCALERS = {
+    "Alibaba": ["alibaba", "aliyun"],
+    "Tencent": ["tencent"],
+    "Baidu": ["baidu"],
+    "Huawei": ["huawei"],
     "AWS": ["aws", "amazon web services", "amazon"],
     "Microsoft": ["microsoft", "azure"],
     "Google": ["google", "alphabet", "google cloud"],
@@ -594,3 +598,48 @@ AMBIGUOUS_TERMS = {
     "tract", "edged", "constellation", "cortex", "stream data centers",
     "tesla",  # Tesla coil contexts are rare, but keep the capitalisation gate
 }
+
+
+# Dedicated coverage supplements trade feeds. Query hits are not automatically
+# attributed to the target: the collector must find an entity in the text.
+HYPERSCALER_QUERIES = {
+    "AWS": '"Amazon" OR "AWS"', "Microsoft": '"Microsoft" OR "Azure"',
+    "Google": '"Google" OR "Alphabet"', "Meta": '"Meta"',
+    "Oracle": '"Oracle"', "Apple": '"Apple"', "ByteDance": '"ByteDance"',
+    "xAI": '"xAI"', "OpenAI": '"OpenAI"', "Anthropic": '"Anthropic"',
+    "NVIDIA": '"Nvidia"', "Tesla": '"Tesla"', "Alibaba": '"Alibaba" OR "Aliyun"',
+    "Tencent": '"Tencent"', "Baidu": '"Baidu"', "Huawei": '"Huawei"',
+}
+HYPERSCALER_NEWS_TERMS = [
+    "data center", "data centers", "data centre", "data centres", "datacenter",
+    "datacenters", "datacentre", "hyperscale", "cloud region", "cloud regions",
+    "availability zone", "cloud infrastructure", "ai infrastructure", "ai factory",
+    "compute capacity", "gpu cluster", "lease", "leasing", "power purchase",
+    "nuclear", "gigawatt", "megawatt", "capex", "capital expenditure",
+    "capital spending", "earnings", "quarterly results", "investment", "financing",
+    "acquisition", "sovereign cloud", "trainium", "blackwell",
+]
+COMPANY_FEEDS = [
+    ("AWS", "https://aws.amazon.com/blogs/aws/feed/"),
+    ("Microsoft", "https://blogs.microsoft.com/feed/"),
+    ("Google", "https://blog.google/rss/"),
+    ("Meta", "https://about.fb.com/feed/"),
+    ("Apple", "https://www.apple.com/newsroom/rss-feed.rss"),
+    ("OpenAI", "https://openai.com/news/rss.xml"),
+    ("NVIDIA", "https://blogs.nvidia.com/feed/"),
+]
+for company, url in COMPANY_FEEDS:
+    SOURCES.append({"name": company + " official news", "short": "OFFICIAL-" + company,
+                    "url": url, "implied_party": company, "tier": "primary",
+                    "hyperscaler_scope": True, "coverage_company": company})
+
+# Google News is a discovery channel, not the original publisher or evidence
+# of verification. Keep those results unconfirmed pending human review.
+from urllib.parse import urlencode
+for company, query in HYPERSCALER_QUERIES.items():
+    params = {"q": "(" + query + ") (\"data center\" OR datacenter OR \"data centre\" OR \"cloud infrastructure\" OR capex OR earnings OR \"compute capacity\" OR \"power purchase\" OR leasing)",
+              "hl": "en-US", "gl": "US", "ceid": "US:en"}
+    SOURCES.append({"name": company + " news discovery", "short": "NEWS-" + company,
+                    "url": "https://news.google.com/rss/search?" + urlencode(params),
+                    "tier": "unconfirmed", "hyperscaler_scope": True,
+                    "coverage_company": company, "discovery": True})

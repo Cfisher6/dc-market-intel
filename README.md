@@ -210,3 +210,24 @@ Private transaction comps, cap rate series, and platform marks are still not
 publicly disclosed anywhere — that gap is real and permanent under a
 public-only constraint. Rating-agency ABS presale reports are the other free
 path in, not yet automated here.
+
+
+## Hyperscaler news coverage
+
+Dedicated collection covers AWS, Microsoft, Google, Meta, Oracle, Apple,
+ByteDance, xAI, OpenAI, Anthropic, NVIDIA, Tesla, Alibaba, Tencent, Baidu,
+and Huawei. This includes adjacent AI infrastructure buyers, not only cloud operators.
+Seven tested company RSS feeds supplement trade reporting. Targeted Google News
+RSS searches provide additional discovery for each company. Discovery records
+retain the publisher name and news redirect URL, are `unconfirmed`, and do not
+reuse search snippets as article summaries. Search results must independently
+match a tracked company and an infrastructure/business signal; a query target
+alone never assigns a company tag. Official feeds require infrastructure,
+leasing, power, investment, or earnings relevance to avoid routine product noise.
+
+The expandable coverage panel shows stored articles, latest article dates, feed
+availability, and matches this run by company. Zero matches is visible; successful
+fetching is not a completeness guarantee. English-language search and feed length
+limits remain coverage constraints. The weekly collection and human PR review gate
+are unchanged. No generated records are hand-authored and no research methodologies
+are combined.
