@@ -232,6 +232,22 @@
       (bad.length ? " — " + bad.map(function (r) { return r.source; }).join(", ") + " failed" : "") +
       ". Last run " + latestRun + ".";
 
+    if (F.hyperscaler_coverage) {
+      var coverage = document.createElement("details");
+      coverage.className = "hyperscaler-coverage";
+      coverage.innerHTML = '<summary>Hyperscaler coverage · ' + F.hyperscaler_coverage.length + ' companies</summary><p>Stored article counts, not project totals. Feed availability does not guarantee complete news coverage. Click a company to filter.</p><div>' +
+        F.hyperscaler_coverage.map(function (r) {
+          return '<button type="button" data-company="' + esc(r.company) + '"><strong>' + esc(r.company) + '</strong> · ' + r.events +
+            ' articles · ' + r.sources_ok + '/' + r.sources_total + ' feeds available<br><small>' +
+            r.items_this_run + ' matches this run · Latest article: ' + esc(r.latest_event || 'None captured') + '</small></button>';
+        }).join('') + '</div>';
+      el("dash-source-health").parentNode.insertAdjacentElement("afterend", coverage);
+      coverage.addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-company]");
+        if (b) setFilter("party", b.dataset.company);
+      });
+    }
+
     /* --- filter option lists ----------------------------------------------- */
     var allTypes = uniqueSorted(events.map(function (e) { return e.event_type; }));
     var allTopics = uniqueSorted(events.reduce(function (a, e) { return a.concat(e.topics || []); }, []));
@@ -834,7 +850,7 @@
       }
       return '<td colspan="11"><div class="det-grid">' +
         (ev.summary ? '<div class="det-item det-summary"><span class="metric-label">Summary — ' +
-          esc(outletName(ev.source)) + "</span> " + esc(ev.summary) + "</div>" : "") +
+          esc((ev.publisher || outletName(ev.source))) + "</span> " + esc(ev.summary) + "</div>" : "") +
         dl("Topics", (ev.topics || []).join(", ")) +
         dl("First seen", esc(firstSeen(ev))) +
         dl("Last seen", esc(ev.last_seen || "")) +
@@ -876,7 +892,7 @@
             '<td><span class="pill pill-' + typeColor(ev.event_type) + '">' + esc(typeLabel(ev.event_type)) + "</span></td>" +
             "<td>" + srcLink(ev.url, ev.title) +
               (ev.summary ? '<p class="ev-summary">' + esc(ev.summary) +
-                '<span class="ev-cite"> — ' + esc(outletName(ev.source)) + "</span></p>" : "") +
+                '<span class="ev-cite"> — ' + esc((ev.publisher || outletName(ev.source))) + "</span></p>" : "") +
             "</td>" +
             "<td>" + (partyChips || "—") + "</td>" +
             "<td>" + (metroChips || "—") + "</td>" +

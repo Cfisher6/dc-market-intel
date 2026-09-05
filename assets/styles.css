@@ -674,3 +674,10 @@ tr:last-child td { border-bottom-color: var(--rule); }
 .bd-body .bd-value { white-space: nowrap; }
 .bd-body .bd-label, .bd-body .bd-value { font-size: 0.75rem; }
 .bd-body .bd-track { height: 7px; }
+
+.hyperscaler-coverage { margin: 0 0 18px; padding: 10px 14px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); }
+.hyperscaler-coverage summary { cursor: pointer; font-weight: 600; }
+.hyperscaler-coverage p { color: var(--slate); font-size: .8rem; }
+.hyperscaler-coverage > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 8px; }
+.hyperscaler-coverage button { padding: 10px; text-align: left; font: inherit; font-size: .8rem; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); cursor: pointer; }
+.hyperscaler-coverage button:hover, .hyperscaler-coverage button:focus-visible { border-color: var(--signal); }

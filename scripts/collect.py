@@ -91,6 +91,12 @@ def discover_feed(homepage):
     return urllib.parse.urljoin(homepage, href.group(1)) if href else None
 
 
+def relevant_hyperscaler_news(title, summary, implied=None):
+    text = title + " " + summary
+    company = implied or match_dict(text, O.HYPERSCALERS)
+    return bool(company) and any(has_term(text, term) for term in O.HYPERSCALER_NEWS_TERMS)
+
+
 def fetch_sources(days):
     feedparser = _feedparser()
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
@@ -111,6 +117,7 @@ def fetch_sources(days):
 
         if not parsed.entries:
             report.append({"source": src["name"], "ok": False, "count": 0,
+                           "short": src["short"], "coverage_company": src.get("coverage_company"),
                            "note": err or "no entries — check feed URL in ontology.py SOURCES"})
             continue
 
@@ -123,19 +130,37 @@ def fetch_sources(days):
                     break
             if pub and pub < cutoff:
                 continue
+            title = html.unescape(getattr(e, "title", "")).strip()
+            summary = re.sub(r"<[^>]+>", " ", html.unescape(getattr(e, "summary", "")))
+            link = getattr(e, "link", "")
+            if urllib.parse.urlsplit(link).scheme not in ("http", "https"):
+                continue
+            publisher = getattr(e, "source", {}).get("title", "")
+            if src.get("discovery"):
+                suffix = " - " + publisher
+                if publisher and title.endswith(suffix):
+                    title = title[:-len(suffix)]
+                # Search RSS descriptions repeat the headline; do not present
+                # those snippets as publisher-written article summaries.
+                summary = ""
+            if src.get("hyperscaler_scope") and not relevant_hyperscaler_news(title, summary, src.get("implied_party")):
+                continue
             items.append({
-                "title": html.unescape(getattr(e, "title", "")).strip(),
-                "url": getattr(e, "link", ""),
-                "summary": re.sub(r"<[^>]+>", " ", html.unescape(getattr(e, "summary", ""))),
+                "title": title,
+                "url": link,
+                "summary": summary,
                 "date": pub.date().isoformat() if pub else "",
                 "source": src["short"],
                 "source_full": src["name"],
+                "publisher": publisher or src["name"],
+                "discovery": src.get("discovery", False),
                 "implied_party": src.get("implied_party"),
                 "source_tier": src.get("tier", "trade_press"),
             })
             n += 1
         report.append({"source": src["name"], "short": src["short"], "ok": True,
-                       "count": n, "note": note, "url": url})
+                       "count": n, "note": note, "url": url,
+                       "coverage_company": src.get("coverage_company") })
 
     return items, report
 
@@ -202,7 +227,8 @@ def dedupe(items):
         nt = norm_title(it["title"])
         dup = next((k2 for k2 in kept if SequenceMatcher(None, nt, norm_title(k2["title"])).ratio() > 0.86), None)
         if dup:
-            dup.setdefault("also_in", []).append(it["source"])
+            if not it.get("discovery"):
+                dup.setdefault("also_in", []).append(it["source"])
             continue
         kept.append(it)
     return kept
@@ -303,6 +329,8 @@ def opposition_status(text, event_type):
 def confidence_of(text, source_tier):
     """Primary sources are never downgraded — a filing is a filing. Trade
     press drops to unconfirmed when the language hedges."""
+    if source_tier == "unconfirmed":
+        return "unconfirmed"
     if source_tier == "primary":
         return "primary"
     if any(has_term(text, t) for t in O.RUMOR_TERMS):
@@ -408,9 +436,10 @@ def build_events(items, deep=False):
     events, texts = [], {}
     for it in items:
         text = it["title"] + " " + it["summary"]
-        if is_noise(text):
+        if is_noise(text) and not relevant_hyperscaler_news(it["title"], it["summary"], it.get("implied_party")):
             continue
-        text = text + " " + sec_item_hints(text)
+        if str(it.get("source", "")).startswith("SEC-"):
+            text = text + " " + sec_item_hints(text)
         # SEC filing indexes title themselves "8-K - Current report", which
         # says nothing about who filed — the feed is scoped by CIK, so the
         # name never appears. Prefix it so the row is legible on its own.
@@ -426,6 +455,8 @@ def build_events(items, deep=False):
             "url": it["url"],
             "date": it["date"],
             "source": it["source"],
+            "publisher": it.get("publisher", it.get("source_full", it["source"])),
+            "discovery": it.get("discovery", False),
             "also_in": it.get("also_in", []),
             "event_type": classify_event(text),
             "hyperscalers": match_dict(text, O.HYPERSCALERS),
@@ -478,6 +509,8 @@ def deep_scan(events, texts):
             break
         if fetched:
             time.sleep(0.5)
+        if ev.get("discovery"):
+            continue  # News redirects are not article bodies.
         body, scoped = fetch_article_text(ev["url"])
         fetched += 1
         if not body or not scoped:
@@ -485,7 +518,7 @@ def deep_scan(events, texts):
         full = texts[ev["id"]] + " " + body
         ev["quantities"] = extract_quantities(full)
         ev["mw_basis"] = mw_basis(full)
-        ev["hyperscalers"] = match_dict(full, O.HYPERSCALERS)
+        ev["hyperscalers"] = sorted(set(ev["hyperscalers"]) | set(match_dict(full, O.HYPERSCALERS)))
         ev["neoclouds"] = match_dict(full, O.NEOCLOUDS)
         ev["operators"] = match_dict(full, O.OPERATORS)
         ev["power_entities"] = match_dict(full, O.POWER_ENTITIES)
@@ -534,7 +567,26 @@ def mw_tally(events):
 # write
 # ---------------------------------------------------------------------------
 
+def hyperscaler_coverage(events, report):
+    rows = []
+    for company in O.HYPERSCALER_QUERIES:
+        tagged = [e for e in events if company in e.get("hyperscalers", [])]
+        sources = [r for r in report if r.get("coverage_company") == company]
+        rows.append({"company": company, "events": len(tagged),
+                     "latest_event": max((e.get("date", "") for e in tagged), default=""),
+                     "sources_ok": sum(bool(r["ok"]) for r in sources),
+                     "sources_total": len(sources),
+                     "items_this_run": sum(r["count"] for r in sources)})
+    return rows
+
+
 def write_feed(events, report, days):
+    # Discovery is not independent verification, including persisted records.
+    for event in events:
+        # Multiple search queries are not independent publisher corroboration.
+        event["also_in"] = [code for code in event.get("also_in", []) if not code.startswith("NEWS-")]
+        if event.get("discovery"):
+            event["confidence_tier"] = "unconfirmed"
     payload = {
         # 2 = relevance_score/confidence_tier split, opposition_status.
         # Readers should tolerate schema 1 records (flat `score`, no tier)
@@ -544,6 +596,7 @@ def write_feed(events, report, days):
         "window_days": days,
         "sources": report,
         "manual_sources": O.MANUAL_SOURCES,
+        "hyperscaler_coverage": hyperscaler_coverage(events, report),
         "events": events,
         "mw_tally": mw_tally(events),
     }
